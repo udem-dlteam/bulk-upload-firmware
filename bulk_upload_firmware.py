@@ -10,7 +10,7 @@ import esptool
 
 serial_port_pattern = {
     'darwin': r'tty\.wchusbserial.*|tty\.usbserial.*|tty\.usbmodem.*',
-    'linux': r'ttyUSB.*',
+    'linux': r'ttyUSB.*|ttyACM.*',
 }
 
 # Detect devices with know names
@@ -124,6 +124,7 @@ def upload(port, device_id, dev, firmware, chip, mac):
         def generate_config():
             filename = device_id + '.config'
             f = open(filename, 'w')
+            # TODO: Add other variables
             f.write('device_id = ' + repr(device_id) + '\n')
             f.close()
             return filename
@@ -178,15 +179,21 @@ def ampy_run(args):
 
 # Start uploading firmware automatically when devices are connected
 
+import threading
+
 def main(firmware):
 
     def serial_port_notification(port, connection):
-        device_id = device_id_from_port(port)
-        if connection:
-            print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> connected: ' + port)
-            detect_device_and_upload_firmware(port, device_id, firmware)
-        else:
-            print('                               disconnected: ' + port)
+        def thunk():
+            device_id = device_id_from_port(port)
+            if connection:
+                print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> connected: ' + port)
+                detect_device_and_upload_firmware(port, device_id, firmware)
+            else:
+                print('                               disconnected: ' + port)
+
+        t = threading.Thread(target=thunk)
+        t.start()
 
     observe_serial_ports_for_changes(serial_port_notification)
 
