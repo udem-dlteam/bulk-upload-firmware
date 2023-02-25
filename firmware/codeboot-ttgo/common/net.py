@@ -112,7 +112,9 @@ def connect(network_id, handler):
         # Join the 'network'
         socket.emit("join_room", network_id)
 
+        # Setup listeners, we listen to our own id and to "*" which means 'everybody'
         @socket.on(id)
+        @socket.on("*")
         def handler_wrapper(data):
             # Ignore room since net allows connection to a single room
             username, _, message = data
@@ -121,10 +123,6 @@ def connect(network_id, handler):
                 i -= 1
                 if not _handlers_stack[i](username, message):
                     i = 0 # stop bubbling
-
-        # Setup listeners, we listen to our own id and to "*" which means 'everybody'
-        socket.on(id, handler_wrapper)
-        socket.on("*", handler_wrapper)
 
         # Clean up event after disconnect
         @socket.on("disconnect")
