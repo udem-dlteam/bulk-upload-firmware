@@ -3,8 +3,7 @@ import splash
 import apps
 
 # apps
-#import pong
-#import snake
+import snake
 import ttt
 import zzz
 

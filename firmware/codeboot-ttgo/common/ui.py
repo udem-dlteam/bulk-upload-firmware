@@ -1,7 +1,7 @@
 import ttgo as dev
 import net
 
-time_delta = 0.02  # time increment for polling buttons, etc
+time_delta = 0.05  # time increment for polling buttons, etc
 long_press = 0.5   # after 0.5 seconds button press is "long"
 
 def pad(text, width):  # pad text with spaces at end
@@ -23,12 +23,8 @@ def draw_status(lines, direction, fg, bg):
         center(x, y + dev.font_height*direction*i, lines[i], fg, bg)
 
 def when_buttons_released(done):  # call done when both buttons not pressed
-
-    def loop():
-        when_buttons_released(done)
-
     if dev.button(0) or dev.button(1):
-        dev.after(time_delta, loop)
+        dev.after(time_delta, lambda: when_buttons_released(done))
     else:
         done()
 
@@ -36,6 +32,12 @@ def track_button_presses(handler):  # call handler according to button presses
 
     def main_loop():
         track_button_presses(handler)
+
+    def main_loop_when_released():
+        if dev.button(0) or dev.button(1):
+            handler('tick', main_loop_when_released)
+        else:
+            main_loop()
 
     def tick(loop):
         handler('tick', loop)
@@ -67,12 +69,12 @@ def track_button_presses(handler):  # call handler according to button presses
                 if cancelled:
                     if dev.button(1-pressed):
                         # long press of both buttons: generate "cancel" event
-                        handler('cancel', main_loop)
+                        handler('cancel', main_loop_when_released)
                     else:
                         tick(main_loop)  # ignore button press
                 else:
                     # long press of one button: generate "ok" event
-                    handler('left_ok' if b0 else 'right_ok', main_loop)
+                    handler('left_ok' if b0 else 'right_ok', main_loop_when_released)
             else:
                 timer -= 1
                 tick(inner_loop)  # check again soon

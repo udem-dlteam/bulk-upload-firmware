@@ -28,11 +28,12 @@ grid_y = grid_x + (dev.screen_height - min(dev.screen_width, dev.screen_height))
 
 # game state
 
-grid     = []    # state of all the cells (0=empty, 1=X, 2=O), set later
-occupied = 0     # number of non-empty cells, set later
-scores   = []    # score of mate and me, set later
-rounds   = 0     # number of rounds played, set later
-me       = None  # am I X or O?, set later
+grid      = []    # state of all the cells (0=empty, 1=X, 2=O), set later
+occupied  = 0     # number of non-empty cells, set later
+alignment = None  # list of positions where there are aligned symbols
+scores    = []    # score of mate and me, set later
+rounds    = 0     # number of rounds played, set later
+me        = None  # am I X or O?, set later
 
 # the following global variables are useful for the networked version
 
@@ -40,6 +41,11 @@ networked   = False  # are we playing over the network?
 random_seed = 0      # to get same random order on both nodes, set later
 msg_type    = None   # type of the messages sent between the nodes, set later
 ping_timer  = 0      # used to check that the mate is still with us
+pong_timer  = 0
+
+def reset_mate_timeout():
+    global pong_timer
+    pong_timer = int(5 / ui.time_delta)  # reset peer timeout to 5 seconds
 
 def quit():  # called to quit the game
     if networked:
@@ -47,9 +53,11 @@ def quit():  # called to quit the game
     leave()
 
 def leave():
+    global me
+    me = None  # no longer playing
     if networked:
         net.pop_handler()  # remove message_handler
-    apps.menu()
+    apps.menu()  # go back to app menu
 
 def current_player():  # returns the current player (X=1, O=2)
     return occupied % 2 + 1  # player X is always first to go
@@ -157,19 +165,20 @@ def init_game():
     init_round()
 
 def init_round():
-    global grid, occupied
+    global grid, occupied, alignment
 
     grid = [0] * size**2  # start with empty grid
     occupied = 0
+    alignment = None
 
 def move_selection(direction):
+    i = selection
     if occupied < len(grid):
         repeat = True
-        i = selection
         while repeat:
             i = (i + direction) % len(grid)
             repeat = grid[i] != 0
-        set_selection(i)
+    set_selection(i)
 
 def set_selection(i):
     global selection
@@ -181,20 +190,20 @@ def set_selection(i):
         net.send(mate.id, [msg_type, 'set_selection', selection])
 
 def play_at_selection():
-    global occupied
+    global occupied, alignment
     player = current_player()
     if networked and player == me:
         net.send(mate.id, [msg_type, 'play_at_selection'])
     grid[selection] = player
     alignment = get_alignment()
     if alignment is None:
-        occupied += 1
+        occupied += 1  # this indirectly changes the current_player()
         move_selection(+1)
         draw_status()
-        if occupied < len(grid):
-            select_cell()
-        else:
+        if occupied == len(grid):
             dev.after(1, end_of_round)
+        else:
+            ui.when_buttons_released(lambda:None)
     else:
         for i in alignment:
             draw_cell(i, player_bg[player==me])
@@ -213,42 +222,44 @@ def end_of_round():
         dev.after(3, quit)  # quit the game after 3 sec
     else:
         me = 3 - me  # alternate between X and O
-        start_round()
+        ui.when_buttons_released(start_round)
 
 def button_handler(event, resume):
-    global ping_timer
+    global ping_timer, pong_timer
+    if me is None: return  # not yet playing or no longer playing
     player = current_player()
     if event == 'left_down' or event == 'right_down':
         resume()
     elif event == 'left_up' or event == 'right_up':
-        move_selection(-1 if event == 'left_up' else +1)
+        if (player == me or not networked) and not alignment:
+            move_selection(-1 if event == 'left_up' else +1)
         resume()
     elif event == 'left_ok' or event == 'right_ok':
-        play_at_selection()
+        if (player == me or not networked) and not alignment:
+            play_at_selection()
+        resume()
     elif event == 'cancel':
         quit()
     elif event == 'tick':
         if networked:
+            pong_timer -= 1
+            if pong_timer < 0:
+                leave()
+                return
             ping_timer -= 1
             if ping_timer < 0:
                 ping_timer = int(2 / ui.time_delta)  # send ping every 2 secs
                 net.send(mate.id, [msg_type, 'ping'])
         dev.after(ui.time_delta, resume) # need to wait...
 
-def select_cell():
-    if occupied < len(grid)-1:  # at least 2 cells are empty?
-        if not networked or current_player() == me:
-            ui.when_buttons_released(select_cell_using_buttons)
-    else:
-        play_at_selection()  # force playing at empty cell
+def start_game_soon(player):
+    dev.after(3, lambda: start_game(player))
 
-def select_cell_using_buttons():
-    ui.track_button_presses(button_handler)
-
-def start_game():
-    dev.after(3, start_round_after_clearing_screen)
-
-def start_round_after_clearing_screen():
+def start_game(player):
+    global me
+    me = player
+    reset_mate_timeout()
+    ui.track_button_presses(button_handler)  # start tracking button presses
     dev.clear_screen(bg)
     start_round()
 
@@ -260,13 +271,10 @@ def start_round():
     draw_status()
     player = current_player()
     draw_selection(player_bg[player==me])
-    select_cell()
 
 def ttt_non_networked():
-    global me
     init_game()
-    me = X
-    start_game()
+    start_game(X)
 
 # The following functions are used when playing the game over the network
 
@@ -274,31 +282,32 @@ def master():  # the master is the node with the smallest id
     return net.id < mate.id
 
 def message_handler(peer, msg):
-    global me
+    global me, pong_timer
     if peer is None:
         if msg == 'found_mate':
             found_mate()
         else:
-            print('#####', peer, msg)  # ignore other messages from system
+            print('system message', msg)  # ignore other messages from system
     elif type(msg) is list and msg[0] == msg_type:
         if me == None:
             random.seed(random_seed ^ msg[1])  # set same RNG on both nodes
-            # if 2 random bits are equal, master is the active player
-            me = X if master() is (random.randrange(2) == 0) else O
-            start_game()
+            # determine if we are X or O
+            start_game_soon(X if master() is (random.randrange(2) == 0) else O)
+        elif msg[1] == 'quit':
+            leave()
+        elif msg[1] == 'ping':
+            reset_mate_timeout()
         elif current_player() == me:
             # active player received a message
-            print('active got', msg)
+            print('active player received', msg)
         else:
             # passive player received a message
             if msg[1] == 'set_selection':
                 set_selection(int(msg[2]))
             elif msg[1] == 'play_at_selection':
                 play_at_selection()
-            elif msg[1] == 'quit':
-                leave()
             else:
-                print('passive got', msg)
+                print('passive player received', msg)
 
 def found_mate():
     global random_seed

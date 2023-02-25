@@ -3,6 +3,11 @@ import net
 import ui
 import splash
 
+network_id = 'TEAM99'    # replace 99 by your team number
+
+wifi_ssid  = 'eero'      # the wifi's SSID and password
+wifi_pwd   = 'wifiwifi'
+
 id = None  # id of the peer we mated with
 
 reply_timeout = 2  # wait 2 seconds for mating proposal reply
@@ -10,13 +15,14 @@ reply_timeout = 2  # wait 2 seconds for mating proposal reply
 net_started = False
 
 def ignore(peer, msg):
-    print('>>>>>', peer, msg)
+    pass
 
 def connect_to_net():
     global net_started
     if not net_started:
         net_started = True
-        net.connect('TEST', ignore)
+        net.set_wifi(wifi_ssid, wifi_pwd)
+        net.connect(network_id, ignore)
 
 def peers():
     return list(net.peers())
@@ -30,7 +36,7 @@ def peers_menu(activity, menu_handler):
 
     dev.clear_screen(splash.bg)
 
-    dev.fill_rectangle(0, 0, dev.width, 58, bg)
+    dev.fill_rect(0, 0, dev.screen_width, 58, bg)
     ui.center(dev.screen_width//2, 10, activity, fg, bg)
 
     ui.center(dev.screen_width//2, 38, net.id, color, bg)
@@ -38,7 +44,7 @@ def peers_menu(activity, menu_handler):
     fg = '#FFF'
     bg = '#666'
 
-    dev.fill_rectangle(0, 58, dev.screen_width, 50, bg)
+    dev.fill_rect(0, 58, dev.screen_width, 50, bg)
     ui.center(dev.screen_width//2, 70, 'choose', fg, bg)
     ui.center(dev.screen_width//2, 86, 'mate', fg, bg)
 
