@@ -101,6 +101,7 @@ def connect(network_id, handler):
     # Setup current handler
     push_handler(handler)
 
+    @socket.on("connect")
     def after_connection(*args):
         global _connection
         global _network_id
@@ -111,6 +112,7 @@ def connect(network_id, handler):
         # Join the 'network'
         socket.emit("join_room", network_id)
 
+        @socket.on(id)
         def handler_wrapper(data):
             # Ignore room since net allows connection to a single room
             username, _, message = data
@@ -125,18 +127,15 @@ def connect(network_id, handler):
         socket.on("*", handler_wrapper)
 
         # Clean up event after disconnect
+        @socket.on("disconnect")
         def after_disconnect(*args):
             _reset()
-
-        socket.on("disconnect", after_disconnect)
 
         # Now that we have a connection, emit queued events
         for to, data in _emit_queue:
             send(to, data)
 
         _emit_queue.clear()
-
-    socket.on("connect", after_connection)
 
 def disconnect():
     if _connection:
