@@ -95,12 +95,15 @@ def connect(network_id, handler):
     # Fetch id
     id = get_id()
 
-    def attempt_connect():
+    def attempt_connect(timeout):
         # Request connection
+        if timeout <= 0:
+            raise OSError("could not connect to net")
+
         try:
             socket = usocketio.client.connect("http://codeboot.org:80", "username=" + id)
         except OSError:
-            dev.after(1, attempt_connect)
+            dev.after(1, lambda: attempt_connect(timeout - 1))
 
         return success(socket)
 
@@ -142,7 +145,7 @@ def connect(network_id, handler):
 
             _emit_queue.clear()
     
-    attempt_connect()
+    attempt_connect(20)
 
 def disconnect():
     if _connection:
