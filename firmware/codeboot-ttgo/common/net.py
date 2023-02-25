@@ -75,16 +75,11 @@ def connect(network_id, handler):
     # Fetch id
     id = get_id()
 
-    def attempt_connect(timeout):
-        # Request connection
-        if timeout <= 0:
-            raise OSError("could not connect to net")
-
+    def attempt_connect():
         try:
             socket = usocketio.client.connect(config.network_url, "username=" + id)
         except OSError:
-            print("attempting connection...")
-            dev.after(1, lambda: attempt_connect(timeout - 1))
+            print("could not connect...")
             return
 
         print("Connection success!")
