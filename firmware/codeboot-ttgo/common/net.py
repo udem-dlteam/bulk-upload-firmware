@@ -33,26 +33,6 @@ def _reset():
     _emit_queue.clear()
     _peers.clear()
 
-def _start_peers_scan():
-
-    def scan():
-        if _connection:
-            _connection.emit("scan_room", get_network_id())
-
-        dev.after(PEERS_SCAN_INTERVAL, scan)
-
-    scan()
-
-def _update_peers(peers):
-
-    # remove own id from list
-    try:
-        peers.remove(get_id())
-    except ValueError:
-        pass
-
-    _peers[:] = peers
-
 # API
 
 class NetError(Exception):
@@ -105,9 +85,9 @@ def connect(network_id, handler):
         except OSError:
             print("attempting connection...")
             dev.after(1, lambda: attempt_connect(timeout - 1))
+            return
 
         print("Connection success!")
-        print(socket)
         return success(socket)
 
     def success(socket):
@@ -122,6 +102,25 @@ def connect(network_id, handler):
 
         # Join the 'network'
         socket.emit("join_room", network_id)
+
+        def beat():
+            socket.emit("heartbeat", "")
+            dev.after(5, beat)
+
+        beat()
+
+        @socket.on("heartbeat")
+        @socket.on("join_room")
+        def add_peer(data):
+            username = data[0]
+            if username != get_id() and username not in _peers:
+                _peers.append(username)
+
+        @socket.on("leave_room")
+        def remove_peer(data):
+            username = data[0]
+            if username in _peers:
+                _peers.remove(username)
 
         # Setup listeners, we listen to our own id and to "*" which means 'everybody'
         @socket.on(id)
@@ -181,4 +180,3 @@ def __getattr__(name):
 def __dir__():
     return __all__ + list(__properties__)
 
-_start_peers_scan()
