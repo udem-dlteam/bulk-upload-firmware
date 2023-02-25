@@ -37,7 +37,7 @@ def _start_peers_scan():
 
     def scan():
         if _connection:
-            _connection.emit("scan_room", get_network_id(), callback=_update_peers)
+            _connection.emit("scan_room", get_network_id())
 
         dev.after(PEERS_SCAN_INTERVAL, scan)
 
@@ -103,47 +103,48 @@ def connect(network_id, handler):
         try:
             socket = usocketio.client.connect("http://codeboot.org:80", "username=" + id)
         except OSError:
+            print("attempting connection...")
             dev.after(1, lambda: attempt_connect(timeout - 1))
 
+        print("Connection success!")
+        print(socket)
         return success(socket)
 
     def success(socket):
+        global _connection
+        global _network_id
+
         # Setup current handler
         push_handler(handler)
 
-        @socket.on("connect")
-        def after_connection(*args):
-            global _connection
-            global _network_id
+        _connection = socket
+        _network_id = network_id
 
-            _connection = socket
-            _network_id = network_id
+        # Join the 'network'
+        socket.emit("join_room", network_id)
 
-            # Join the 'network'
-            socket.emit("join_room", network_id)
+        # Setup listeners, we listen to our own id and to "*" which means 'everybody'
+        @socket.on(id)
+        @socket.on("*")
+        def handler_wrapper(data):
+            # Ignore room since net allows connection to a single room
+            username, _, message = data
+            i = len(_handlers_stack)
+            while i > 0:
+                i -= 1
+                if not _handlers_stack[i](username, message):
+                    i = 0 # stop bubbling
 
-            # Setup listeners, we listen to our own id and to "*" which means 'everybody'
-            @socket.on(id)
-            @socket.on("*")
-            def handler_wrapper(data):
-                # Ignore room since net allows connection to a single room
-                username, _, message = data
-                i = len(_handlers_stack)
-                while i > 0:
-                    i -= 1
-                    if not _handlers_stack[i](username, message):
-                        i = 0 # stop bubbling
+        # Clean up event after disconnect
+        @socket.on("disconnect")
+        def after_disconnect(*args):
+            _reset()
 
-            # Clean up event after disconnect
-            @socket.on("disconnect")
-            def after_disconnect(*args):
-                _reset()
+        # Now that we have a connection, emit queued events
+        for to, data in _emit_queue:
+            send(to, data)
 
-            # Now that we have a connection, emit queued events
-            for to, data in _emit_queue:
-                send(to, data)
-
-            _emit_queue.clear()
+        _emit_queue.clear()
     
     attempt_connect(20)
 
