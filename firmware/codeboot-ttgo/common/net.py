@@ -168,7 +168,8 @@ def peers():
 # Add id and network_id as module properties
 __properties__ = {
     'id': get_id,
-    'network_id': get_network_id
+    'network_id': get_network_id,
+    'connected': lambda: False if not _connection else _connection.connected
 }
 
 def __getattr__(name):
