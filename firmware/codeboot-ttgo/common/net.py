@@ -44,7 +44,7 @@ def set_wifi(ssid, pwd):
     sta_if.connect(ssid, pwd)
 
 def get_id(timeout=None):
-    return config.id
+    return config.device_id
 
 def get_network_id():
     return _network_id
@@ -81,7 +81,7 @@ def connect(network_id, handler):
             raise OSError("could not connect to net")
 
         try:
-            socket = usocketio.client.connect("http://codeboot.org:80", "username=" + id)
+            socket = usocketio.client.connect(config.network_url, "username=" + id)
         except OSError:
             print("attempting connection...")
             dev.after(1, lambda: attempt_connect(timeout - 1))
