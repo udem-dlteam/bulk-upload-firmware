@@ -23,7 +23,7 @@ def _reset():
     global _trace
     global _network_id
 
-    if _connection: _connection.disconnect()
+    if _connection: _connection.close()
 
     _connection = None
 
