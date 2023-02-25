@@ -142,7 +142,7 @@ def idle():
   else:
     after(1, idle)  # repeat every second
 
-idle()  # start monitoring idleness
+# idle()  # start monitoring idleness
 
 import _thread
 _thread.start_new_thread(scheduler, ())

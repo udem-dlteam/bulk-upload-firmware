@@ -140,7 +140,7 @@ def connect(network_id, handler):
 
         _emit_queue.clear()
     
-    attempt_connect(20)
+    attempt_connect()
 
 def disconnect():
     if _connection:
