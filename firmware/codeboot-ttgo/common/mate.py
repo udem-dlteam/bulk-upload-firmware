@@ -1,6 +1,7 @@
 import ttgo as dev
 import net
 import ui
+import apps
 import splash
 
 network_id = 'TEAM99'    # replace 99 by your team number
@@ -12,17 +13,24 @@ id = None  # id of the peer we mated with
 
 reply_timeout = 2  # wait 2 seconds for mating proposal reply
 
-net_started = False
-
-def ignore(peer, msg):
-    pass
+wifi_started = False
 
 def connect_to_net():
-    global net_started
-    if not net_started:
-        net_started = True
+    global wifi_started
+    if not wifi_started:
+        wifi_started = True
         net.set_wifi(wifi_ssid, wifi_pwd)
-        net.connect(network_id, ignore)
+        connect_to_network_id()
+
+def connect_to_network_id():
+    dev.after(2, connect_to_network_id_loop)
+
+def connect_to_network_id_loop():
+    if not net.connected:
+        net.connect(network_id, lambda peer, msg: None)
+        connect_to_network_id()
+
+connect_to_net()
 
 def peers():
     return list(net.peers())
@@ -80,6 +88,10 @@ def find(activity, message_handler):  # message_handler called when mate is foun
             found_mate()
         elif peer is None:  # menu is asking to wait?
             dev.after(ui.time_delta, cont)
+        elif peer is False:  # cancel?
+            net.pop_handler()  # stop calling mate_message_handler
+            net.pop_handler()  # stop calling app's handler
+            apps.menu()
         else:  # a peer was selected by the menu
 
             # limit how long to listen for the reply to the mating proposal
@@ -101,10 +113,12 @@ def find(activity, message_handler):  # message_handler called when mate is foun
             net.send(peer, mating_msg)  # send mating proposal to the peer
             listen()                    # listen for the reply
 
-    connect_to_net()
+    def wait_until_connected():
+        if net.connected:
+            net.push_handler(message_handler)  # install app's handler
+            net.push_handler(mate_message_handler)  # intercept mating messages
+            peers_menu(activity, menu_handler)
+        else:
+            dev.after(1, wait_until_connected)
 
-    net.push_handler(message_handler)  # install app's handler
-
-    net.push_handler(mate_message_handler)  # intercept mating messages
-
-    peers_menu(activity, menu_handler)
+    wait_until_connected()

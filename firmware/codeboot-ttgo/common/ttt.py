@@ -274,7 +274,7 @@ def start_round():
 
 def ttt_non_networked():
     init_game()
-    start_game(X)
+    start_game_soon(X)
 
 # The following functions are used when playing the game over the network
 
@@ -289,14 +289,14 @@ def message_handler(peer, msg):
         else:
             print('system message', msg)  # ignore other messages from system
     elif type(msg) is list and msg[0] == msg_type:
-        if me == None:
-            random.seed(random_seed ^ msg[1])  # set same RNG on both nodes
-            # determine if we are X or O
-            start_game_soon(X if master() is (random.randrange(2) == 0) else O)
-        elif msg[1] == 'quit':
+        if msg[1] == 'quit':
             leave()
         elif msg[1] == 'ping':
             reset_mate_timeout()
+        elif me is None:
+            random.seed(random_seed ^ msg[1])  # set same RNG on both nodes
+            # determine if we are X or O
+            start_game_soon(X if master() is (random.randrange(2) == 0) else O)
         elif current_player() == me:
             # active player received a message
             print('active player received', msg)
@@ -310,16 +310,13 @@ def message_handler(peer, msg):
                 print('passive player received', msg)
 
 def found_mate():
-    global random_seed
-
     init_game()
-
-    # exchange random seeds so both nodes have the same RNG
-    random_seed = random.randrange(0x1000000)
     net.send(mate.id, [msg_type, random_seed])
 
 def ttt_networked():
-    global msg_type
+    global msg_type, random_seed
+    # exchange random seeds so both nodes have the same RNG
+    random_seed = random.randrange(0x1000000)
     msg_type = 'TTT' + str(size) + 'NET'
     mate.find(msg_type, message_handler)
 

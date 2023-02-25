@@ -35,18 +35,18 @@ def track_button_presses(handler):  # call handler according to button presses
 
     def main_loop_when_released():
         if dev.button(0) or dev.button(1):
-            handler('tick', main_loop_when_released)
+            handle('tick', main_loop_when_released)
         else:
             main_loop()
 
-    def tick(loop):
-        handler('tick', loop)
+    def handle(event, cont):
+        dev.after(0, lambda: handler(event, cont))
 
     b0 = dev.button(0)  # read state of buttons
     b1 = dev.button(1)
 
     if not b0 and not b1:  # no buttons pressed?
-        tick(main_loop)
+        handle('tick', main_loop)
     else:
 
         # determine if it is a long press and generate event for handler
@@ -61,26 +61,26 @@ def track_button_presses(handler):  # call handler according to button presses
                 cancelled = True
             if not dev.button(pressed):  # button was released
                 if cancelled:
-                    tick(main_loop)  # ignore button press
+                    handle('tick', main_loop)  # ignore button press
                 else:
                     # short press of one button: generate "up" event
-                    handler('left_up' if b0 else 'right_up', main_loop)
+                    handle('left_up' if b0 else 'right_up', main_loop)
             elif timer <= 0:  # long press?
                 if cancelled:
                     if dev.button(1-pressed):
                         # long press of both buttons: generate "cancel" event
-                        handler('cancel', main_loop_when_released)
+                        handle('cancel', main_loop_when_released)
                     else:
-                        tick(main_loop)  # ignore button press
+                        handle('tick', main_loop)  # ignore button press
                 else:
                     # long press of one button: generate "ok" event
-                    handler('left_ok' if b0 else 'right_ok', main_loop_when_released)
+                    handle('left_ok' if b0 else 'right_ok', main_loop_when_released)
             else:
                 timer -= 1
-                tick(inner_loop)  # check again soon
+                handle('tick', inner_loop)  # check again soon
 
         # indicate start of button press
-        handler('left_down' if b0 else 'right_down', inner_loop)
+        handle('left_down' if b0 else 'right_down', inner_loop)
 
 def menu(x, y, width, height, linespacing, colors, get_choices, selection, handler):
 
@@ -89,6 +89,9 @@ def menu(x, y, width, height, linespacing, colors, get_choices, selection, handl
     selected = 0
     timer = 0
     start_selection = ''
+
+    def handle(event, cont):
+        dev.after(0, lambda: handler(event, cont))
 
     def get_choices_sorted():
         return sort(list(get_choices()))
@@ -155,16 +158,16 @@ def menu(x, y, width, height, linespacing, colors, get_choices, selection, handl
                 refresh_and_start()
             elif result == start_selection:
                 dev.draw_text(x, cursor_y, pad(selection, width), '#000', '#FF0')
-                handler(result, invalid_choice)
+                handle(result, invalid_choice)
             else:
                 when_buttons_released(refresh_and_start)
         elif event == 'cancel':
-            handler(None, refresh_and_start)
+            handle(False, refresh_and_start)
         elif event == 'tick':
             timer -= 1
             if timer < 0:
                 refresh()
-            handler(None, resume) # need to wait... event is continuation
+            handle(None, resume) # need to wait... event is continuation
 
     def refresh_and_start():
         refresh()

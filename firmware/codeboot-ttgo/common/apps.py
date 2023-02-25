@@ -24,7 +24,7 @@ def menu():  # pick an app with a menu and call its handler
 
     def menu_handler(item, cont):
         global last_app
-        if item is None:  # menu is asking to wait?
+        if item is None or item is False:  # menu is asking to wait?
             dev.after(ui.time_delta, cont)
         else:  # an item was selected by the menu
             handler = apps[item][0]
