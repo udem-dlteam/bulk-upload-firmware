@@ -3,7 +3,7 @@
 FIRMWARE="$1"
 
 if [ "$FIRMWARE" = "" ] ; then
-    FIRMWARE="micropython"
+    FIRMWARE="codeboot-ttgo"
 fi
 
 if [ ! -e "firmware/$FIRMWARE" ] ; then
