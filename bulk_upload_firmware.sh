@@ -3,7 +3,7 @@
 FIRMWARE="$1"
 
 if [ "$FIRMWARE" = "" ] ; then
-    FIRMWARE="micropython"
+    FIRMWARE="codeboot-ttgo"
 fi
 
 if [ ! -e "firmware/$FIRMWARE" ] ; then
@@ -54,5 +54,5 @@ esptool()
     python3 -m esptool $*
 }
 
-#esptool --chip
+#esptool --port /dev/tty.usbmodem56230379101 ...
 python3 bulk_upload_firmware.py "$FIRMWARE"

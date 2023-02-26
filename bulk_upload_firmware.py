@@ -6,6 +6,10 @@
 import sys, os, re, time
 import esptool
 
+# default wifi network
+ssid = 'wifi'
+pwd = 'wifiwifi'
+
 # Detect newly connected serial ports of interest
 
 serial_port_pattern = {
@@ -28,7 +32,7 @@ id_counter = 0
 def generate_id():  # generates '111', '112', '113', '114', '121', ...
     global id_counter
     i = id_counter
-    id_counter += 1
+    id_counter += 4
     return str(i//16+1) + str(i//4%4+1) + str(i%4+1)
 
 def device_id_from_port(port):
@@ -125,7 +129,11 @@ def upload(port, device_id, dev, firmware, chip, mac):
             filename = device_id + '.config'
             f = open(filename, 'w')
             # TODO: Add other variables
-            f.write('device_id = ' + repr(device_id) + '\n')
+            f.write('id = ' + repr(device_id) + '\n')
+            f.write('mac = ' + repr(mac) + '\n')
+            f.write('chip = ' + repr(chip) + '\n')
+            f.write('ssid = ' + repr(ssid) + '\n')
+            f.write('pwd = ' + repr(pwd) + '\n')
             f.close()
             return filename
 
@@ -153,7 +161,7 @@ def upload(port, device_id, dev, firmware, chip, mac):
                     mkdir(remote_path)
                     upload_dir(remote_path)
                 elif file.endswith('.py'):
-                    config = file == 'config.py'
+                    config = file == '_config.py'
                     print(local_path, config)
                     if config: local_path = generate_config()
                     put(local_path, remote_path)
@@ -162,7 +170,7 @@ def upload(port, device_id, dev, firmware, chip, mac):
         upload_dir('')
 
         #ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'ls'])
-        #ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'reset'])
+        ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'run', '_flashtest.py'])
         print('------------ DONE with ' + port)
 
 def esptool_run(args):
