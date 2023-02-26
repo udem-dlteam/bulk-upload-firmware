@@ -7,7 +7,7 @@ import sys, os, re, time
 import esptool
 
 # default wifi network
-ssid = 'wifi'
+ssid = 'eero'
 pwd = 'wifiwifi'
 
 # Detect newly connected serial ports of interest
@@ -87,16 +87,16 @@ def get_mac(dev):
     except:
         return None
 
-def detect_device_and_upload_firmware(port, device_id, firmware):
+def detect_device_and_upload_firmware(port, firmware):
     dev = get_device(port)
     if dev:
         chip = get_chip(dev)
         if chip:
             mac = get_mac(dev)
             if mac:
-                upload(port, device_id, dev, firmware, chip, mac)
+                upload(port, dev, firmware, chip, mac)
 
-def upload(port, device_id, dev, firmware, chip, mac):
+def upload(port, dev, firmware, chip, mac):
     firmware_dir = 'firmware/' + firmware + '/' + chip
     common_dir = 'firmware/' + firmware + '/common'
     firmware_files = list(os.listdir(firmware_dir))
@@ -106,6 +106,7 @@ def upload(port, device_id, dev, firmware, chip, mac):
     elif len(bin_files) >= 2:
         print('*** ERROR: 2 or more .bin files in ' + firmware_dir)
     else:
+        device_id = device_id_from_port(port)
         bin_file = firmware_dir + '/' + bin_files[0]
 
         print('###############################################################################')
@@ -170,7 +171,7 @@ def upload(port, device_id, dev, firmware, chip, mac):
         upload_dir('')
 
         #ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'ls'])
-        ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'run', '_flashtest.py'])
+        ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'run', 'firmware/codeboot-ttgo/common/_flashtest.py'])
         print('------------ DONE with ' + port)
 
 def esptool_run(args):
@@ -193,10 +194,9 @@ def main(firmware):
 
     def serial_port_notification(port, connection):
         def thunk():
-            device_id = device_id_from_port(port)
             if connection:
                 print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> connected: ' + port)
-                detect_device_and_upload_firmware(port, device_id, firmware)
+                detect_device_and_upload_firmware(port, firmware)
             else:
                 print('                               disconnected: ' + port)
 

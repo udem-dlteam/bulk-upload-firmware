@@ -15,7 +15,7 @@ def loop0():
     global timer
     dev.clear_screen(bg)
     timer += 1
-    if timer < 120 and not (dev.button(0) and dev.button(1)):  # after 2 minutes, clean up and boot normally
+    if timer < 600 and not (dev.button(0) and dev.button(1)):  # after 10 minutes, clean up and boot normally
         dev.after(0.25, loop1)
     else:
         os.remove('_flashtest.py')
