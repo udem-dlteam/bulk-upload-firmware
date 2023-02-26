@@ -1,4 +1,4 @@
-import config
+import _config
 
 connected = False
 
@@ -11,7 +11,7 @@ def set_wifi(ssid, pwd):
     pass  # this does nothing on codeBoot
 
 def get_id(timeout=None):
-    return config.device_id
+    return _config.id
 
 def get_network_id():
     return None

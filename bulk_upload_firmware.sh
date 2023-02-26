@@ -54,5 +54,5 @@ esptool()
     python3 -m esptool $*
 }
 
-#esptool --chip
+#esptool --port /dev/tty.usbmodem56230379101 ...
 python3 bulk_upload_firmware.py "$FIRMWARE"
