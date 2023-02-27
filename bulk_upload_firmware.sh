@@ -1,16 +1,5 @@
 #!/bin/sh
 
-FIRMWARE="$1"
-
-if [ "$FIRMWARE" = "" ] ; then
-    FIRMWARE="codeboot-ttgo"
-fi
-
-if [ ! -e "firmware/$FIRMWARE" ] ; then
-    printf "firmware \"$FIRMWARE\" does not exist\n"
-    exit 1
-fi
-
 ESPTOOL_PY_DIR=esptool-py
 ESPTOOL_PY_URL=https://github.com/espressif/esptool.git
 ESPTOOL_PY_VERSION=901017fedde62a8fe5d94a5e4517d66e35613c33
@@ -55,4 +44,5 @@ esptool()
 }
 
 #esptool --port /dev/tty.usbmodem56230379101 ...
-python3 bulk_upload_firmware.py "$FIRMWARE"
+
+python3 bulk_upload_firmware.py $*

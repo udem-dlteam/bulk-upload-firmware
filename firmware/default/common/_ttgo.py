@@ -137,7 +137,7 @@ def idle():
   if idle_counter > last_call_to_button + 30:
     os.remove('run.py')  # remove entry point so we get REPL at next reboot
     soft_reset()
-  elif idle_counter > 60:  # deep sleep after 1 minute of inactivity
+  elif idle_counter > 120:  # deep sleep after 2 minutes of inactivity
     stop()
   else:
     after(1, idle)  # repeat every second
