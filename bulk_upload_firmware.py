@@ -107,7 +107,7 @@ def upload(port, dir, firmware, device_id, template, start, config, dev, chip, m
 
     firmware_dir = dir + '/' + firmware + '/' + chip
 
-    if not os.path.exists(firmware_dir) or os.path.isfile(firmware_dir):
+    if not os.path.exists(firmware_dir) or not os.path.isdir(firmware_dir):
         print('*** ERROR: no directory ' + firmware_dir)
         return
 
@@ -122,7 +122,7 @@ def upload(port, dir, firmware, device_id, template, start, config, dev, chip, m
         print('*** ERROR: 2 or more .bin files in ' + firmware_dir)
     else:
         single_device = device_id is not None
-        if device_id is not None:
+        if device_id is None:
             device_id = device_id_from_port(port, template, start)
         bin_file = firmware_dir + '/' + bin_files[0]
 
@@ -146,14 +146,14 @@ def upload(port, dir, firmware, device_id, template, start, config, dev, chip, m
         baud = '115200'
 
         def generate_config():
-            filename = device_id + '.config'
+            filename = device_id + '._config.py'
             f = open(filename, 'w')
             # TODO: Add other configuration variables
             f.write('id = ' + repr(device_id) + '\n')
             f.write('mac = ' + repr(mac) + '\n')
             f.write('chip = ' + repr(chip) + '\n')
             if config:
-                f.write(config + '\n')
+                f.write(config.replace('\\n','\n') + '\n')
             f.close()
             return filename
 

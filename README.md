@@ -14,9 +14,9 @@ Dependencies:
 
 Sample use:
 
-    ./bulk_upload_firmware.sh --firmware="micropython" --config="ssid = 'mywifi'\\npwd = 'mywifipwd'"
+    ./bulk_upload_firmware.sh --firmware micropython
 
-    ./bulk_upload_firmware.sh --id "TTGO213"  # upload to single device
+    ./bulk_upload_firmware.sh --id "TTGO213" --config "ssid='mywifi'\npwd='mywifipwd'"  # upload to single device
 
 Options:
 

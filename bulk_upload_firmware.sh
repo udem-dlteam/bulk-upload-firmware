@@ -45,4 +45,4 @@ esptool()
 
 #esptool --port /dev/tty.usbmodem56230379101 ...
 
-python3 bulk_upload_firmware.py $*
+python3 bulk_upload_firmware.py $@

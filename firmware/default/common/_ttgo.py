@@ -43,7 +43,7 @@ font_width  = 16
 font_height = 16
 
 def draw_text(x, y, text, fg, bg):
-  screen.text(vga2_bold_16x16, bytes(map(ord, text)), x, y, parseRGB444(fg), parseRGB444(bg))
+  screen.text(vga2_bold_16x16, bytes(map(ord, str(text))), x, y, parseRGB444(fg), parseRGB444(bg))
 
 def draw_image(x, y, image):
   load_image(image)
