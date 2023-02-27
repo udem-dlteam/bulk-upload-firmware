@@ -38,8 +38,9 @@ Options:
                        indicated by the --template option).
 
     --template <T>     The template to use for generated identifiers.  Each
-                       "#" will be replaced by a digit. Defaults to "DEV###".
+                       "#" will be replaced by a digit. Defaults to "DEV#".
 
     --start <N>        The starting sequence number. Defaults to 0.
 
     --config <config>  Python code to add to generated _config.py file.
+                       Any "\n" is replaced with a newline.
