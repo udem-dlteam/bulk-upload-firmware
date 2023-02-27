@@ -16,7 +16,7 @@ Sample use:
 
     ./bulk_upload_firmware.sh --firmware micropython
 
-    ./bulk_upload_firmware.sh --id "TTGO213" --config "ssid='mywifi'\npwd='mywifipwd'"  # upload to single device
+    ./bulk_upload_firmware.sh --id "TTGO213" --config "ssid='mywifi'\npwd='mywifipw'"  # upload to single device
 
 Options:
 
@@ -31,14 +31,12 @@ Options:
     --firmware <name>  Select a specific firmware from the firmware
                        directory.  Defaults to "default".
 
-    --id <id>          Assign a specific device id and exit after its
-                       firmware is uploaded (useful for single upload).
-                       If this option is not specified the script will
-                       sequentially allocate identifiers using the template
-                       indicated by the --template option).
-
-    --template <T>     The template to use for generated identifiers.  Each
-                       "#" will be replaced by a digit. Defaults to "DEV#".
+    --id <id>          Select an id for the device.  If <id> does not contain
+                       a "#" then it will be assigned to the device and the
+                       program will exit after the upload.  If the id contains
+                       one or more contiguous "#" then it is a template for
+                       generating ids. Each "#" will be replaced by a digit.
+                       Defaults to "DEV#".
 
     --start <N>        The starting sequence number. Defaults to 0.
 

@@ -94,16 +94,16 @@ def get_mac(dev):
     except:
         return None
 
-def detect_device_and_upload_firmware(port, dir, firmware, device_id, template, start, config):
+def detect_device_and_upload_firmware(port, dir, firmware, device_id, start, config):
     dev = get_device(port)
     if dev:
         chip = get_chip(dev)
         if chip:
             mac = get_mac(dev)
             if mac:
-                upload(port, dir, firmware, device_id, template, start, config, dev, chip, mac)
+                upload(port, dir, firmware, device_id, start, config, dev, chip, mac)
 
-def upload(port, dir, firmware, device_id, template, start, config, dev, chip, mac):
+def upload(port, dir, firmware, device_id, start, config, dev, chip, mac):
 
     firmware_dir = dir + '/' + firmware + '/' + chip
 
@@ -121,9 +121,9 @@ def upload(port, dir, firmware, device_id, template, start, config, dev, chip, m
     elif len(bin_files) >= 2:
         print('*** ERROR: 2 or more .bin files in ' + firmware_dir)
     else:
-        single_device = device_id is not None
-        if device_id is None:
-            device_id = device_id_from_port(port, template, start)
+        single_device = not ('#' in device_id)
+        if not single_device:
+            device_id = device_id_from_port(port, device_id, start)
         bin_file = firmware_dir + '/' + bin_files[0]
 
         print('###############################################################################')
@@ -215,14 +215,14 @@ def ampy_run(args):
 
 import threading
 
-def main(port, dir, firmware, device_id, template, start, config):
+def main(port, dir, firmware, device_id, start, config):
 
     def serial_port_notification(port, connection):
 
         def handle_notification():
             if connection:
                 print('##################################### connected: ' + port)
-                detect_device_and_upload_firmware(port, dir, firmware, device_id, template, start, config)
+                detect_device_and_upload_firmware(port, dir, firmware, device_id, start, config)
             else:
                 print('##################################### disconnected: ' + port)
 
@@ -235,7 +235,7 @@ def main(port, dir, firmware, device_id, template, start, config):
     if port is None:
         observe_serial_ports_for_changes(serial_port_notification)
     else:
-        detect_device_and_upload_firmware(port, dir, firmware, device_id, template, start, config)
+        detect_device_and_upload_firmware(port, dir, firmware, device_id, start, config)
 
 def cli():
 
@@ -245,13 +245,12 @@ def cli():
     parser.add_argument('--port', default=None)
     parser.add_argument('--dir', default='firmware')
     parser.add_argument('--firmware', default='default')
-    parser.add_argument('--id', default=None)
-    parser.add_argument('--template', default='DEV#')
+    parser.add_argument('--id', default='DEV#')
     parser.add_argument('--start', type=int, default=0)
-    parser.add_argument('--config', default=None)
+    parser.add_argument('--config', default='')
     args = parser.parse_args()
 
-    main(args.port, args.dir, args.firmware, args.id, args.template, args.start, args.config)
+    main(args.port, args.dir, args.firmware, args.id, args.start, args.config)
 
 if __name__ == '__main__':
     cli()
