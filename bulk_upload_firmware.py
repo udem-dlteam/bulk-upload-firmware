@@ -12,7 +12,7 @@ import esptool
 
 serial_port_pattern = {
     'darwin': r'tty\.wchusbserial.*|tty\.usbserial.*|tty\.usbmodem.*',
-    'linux': r'ttyUSB.*|ttyACM.*',
+    'linux': r'ttyUSB.*|ttyACM.*|ttyS[0-9]',
 }
 
 # Detect devices with know names
@@ -136,6 +136,7 @@ def upload(port, dir, firmware, device_id, start, config, dev, chip, mac):
         print('###############################################################################')
 
         baud = '460800'
+        baud = '115200'  # play it safe (seems to cause problems on Windows running under Parallels desktop)
 
         esptool_run(['--port', port, '--baud', baud, 'erase_flash'])
         esptool_run(['--port', port, '--baud', baud, 'write_flash', '-z', '0x0', bin_file])
@@ -226,11 +227,11 @@ def main(port, dir, firmware, device_id, start, config):
             else:
                 print('##################################### disconnected: ' + port)
 
-        if device_id is not None:
-            handle_notification()  # don't do it concurrently
-        else:
+        if '#' in device_id:
             t = threading.Thread(target=handle_notification)
             t.start()
+        else:
+            handle_notification()  # don't do it concurrently
 
     if port is None:
         observe_serial_ports_for_changes(serial_port_notification)
