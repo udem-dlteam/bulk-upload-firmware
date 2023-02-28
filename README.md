@@ -1,24 +1,48 @@
-# bulk-upload-firmware
+This repository contains a script to upload firmware to devices based
+on Espressif ESP8266 and ESP32 microcontrollers such as the TTGO
+T-display and many others.
 
-Script to upload firmware to microcontroller boards based on Espressif
-microcontrollers such as the ESP8266 and ESP32.
+Devices are flashed as soon as they are connected to a USB port, with
+sequentially allocated unique device ids (unless the --id option specifies
+a single id, see below).
 
-The microcontroller boards are flashed as soon as they are connected
-to a USB port, with sequentially allocated unique device ids (unless the
---id option is used).
+# Installation
 
-Dependencies:
+    On macOS and linux, these commands must be entered at the shell.
+    On Windows the Windows Subsystem for Linux (WSL) must be started
+    by entering "wsl" at the start menu and this will open a shell.
 
-    pip3 install adafruit-ampy
-    pip3 install pyserial
+    Most systems already have python3 installed, but if this is not
+    the case then use the standard procedure to install it, for example:
 
-Sample use:
+    $ brew install python3                # macOS
 
-    ./bulk_upload_firmware.sh --firmware micropython
+    $ sudo apt-get install python3        # Ubuntu linux or Windows + WSL
+    $ sudo apt-get install python3-pip
 
-    ./bulk_upload_firmware.sh --id "TTGO213" --config "ssid='mywifi'\npwd='mywifipw'"  # upload to single device
+    Then install the dependencies (all platforms):
 
-Options:
+    $ pip3 install pyserial
+    $ pip3 install adafruit-ampy
+    $ export PATH=~/.local/bin:$PATH      # this line needed on Windows + WSL to access ampy
+
+    Then clone this repository with:
+
+    $ git clone git@github.com:udem-dlteam/bulk-upload-firmware
+    $ cd bulk-upload-firmware
+
+    When the script bulk-upload-firmware.sh is first executed it will
+    install the esptool required for flashing the device.
+
+# Sample use to upload firmware to a device
+
+    $ ./bulk_upload_firmware.sh --id "TTGO213"  # upload default firmware to single device
+
+    $ ./bulk_upload_firmware.sh --firmware micropython  # bulk upload of micropython firmware
+
+    $ ./bulk_upload_firmware.sh --config "ssid='mywifi'\npwd='mywifipw'"  # bulk upload of default firmware
+
+# Command line options
 
     --port <port>      Select specific serial port. If this option is not
                        specified the script will continuously scan all the
