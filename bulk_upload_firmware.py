@@ -8,6 +8,9 @@
 import sys, os, re, time, argparse
 import esptool
 
+wifi_ssid = 'BLINXNET'
+wifi_pwd = 'blinxnet'
+
 # Detect newly connected serial ports of interest
 
 serial_port_pattern = {
@@ -18,7 +21,7 @@ serial_port_pattern = {
 # Detect devices with know names
 
 device_id_patterns = [
-    { 'name': 'BLINX', 'patterns': ['BLX([0-9]*0)'] },
+    { 'name': 'BLINX', 'patterns': ['BLX([0-9][0-9]*)'] },
     { 'name': '',      'patterns': ['()'] },  # catch all
 ]
 
@@ -153,6 +156,8 @@ def upload(port, dir, firmware, device_id, start, config, dev, chip, mac):
             f.write('id = ' + repr(device_id) + '\n')
             f.write('mac = ' + repr(mac) + '\n')
             f.write('chip = ' + repr(chip) + '\n')
+            f.write('ssid = ' + repr(wifi_ssid) + '\n')
+            f.write('pwd = ' + repr(wifi_pwd) + '\n')
             if config:
                 f.write(config.replace('\\n','\n') + '\n')
             f.close()

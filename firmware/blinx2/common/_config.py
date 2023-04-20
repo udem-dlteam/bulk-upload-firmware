@@ -1,0 +1,5 @@
+id = 'BLINX005'
+mac = ''
+chip = ''
+ssid = 'wifi'
+pwd = 'wifiwifi'
