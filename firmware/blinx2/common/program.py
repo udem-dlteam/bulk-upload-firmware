@@ -84,23 +84,17 @@ def wlan_start_connect():
 
 async def wlan_connect_loop(wl):
     global wlan
-    print(get_time())
-    timeout = 10*4 # timeout after 10 seconds
-    while timeout > 0:
-        print(timeout)
-        blinx.led_pin.value(timeout & 1)
+    elapsed = 0
+    while True:
+        print(elapsed)
+        blinx.led_pin.value(elapsed & 1)
         if wl.isconnected(): break
         await uasyncio.sleep_ms(250)
-        timeout -= 1
-    if False and timeout == 0:
-        print("failed to connect to WLAN")
-        blinx.led_pin.value(1) # led off
-        ThreadSafeFlag.set()
-    else:
-        print("connected to WLAN after",(10*4-timeout)*0.25,"secs")
-        blinx.led_pin.value(0) # led on
-        print(wl.ifconfig())
-        wlan = wl
+        elapsed += 1
+    print("connected to WLAN after",elapsed*0.25,"secs")
+    blinx.led_pin.value(0) # led on
+    print(wl.ifconfig())
+    wlan = wl
     wlan_connected.set()
 
 def wlan_disconnect():
@@ -155,6 +149,17 @@ class RequestReader:
         else:
             return b''
 
+    async def read_to_end(self):
+        state = 0
+        while state < 4:
+            byte = await self.read_byte()
+            if byte == (10 if state & 1 else 13):
+                state += 1
+            elif byte >= 0:
+                state = 0
+            else:
+                break  # EOF
+
 async def web_server():
 
     async def handle_client_connection(rstream, wstream):
@@ -170,6 +175,8 @@ async def web_server():
             if not (doc and await rr.expect(b'HTTP/1.1\r\n')):
                 wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
             else:
+
+                await rr.read_to_end()  # important to avoid "connection reset" errors
 
                 q = doc.find(b'?')  # find first '?' if any
                 if q < 0:
@@ -189,8 +196,10 @@ async def web_server():
 
                 await measurements_as_csv(encapsulation)
 
-        print(gc.mem_free())
-        wstream.close()
+        await wstream.drain()
+        await wstream.wait_closed()
+
+#        print(gc.mem_free())
 
     wlan_start_connect()
     await wlan_connected.wait()
@@ -324,8 +333,7 @@ nsamples = 4
 nsensors = 6
 
 bytes_per_measurement = nsensors * 2
-
-#sensors = { 'temp': 5, 'humid': 5, 'an11': 
+measurements = bytearray(size * bytes_per_measurement)
 
 async def sensor_reader():
     global lo, hi, measurement_time
@@ -373,14 +381,14 @@ async def sensor_reader():
 
         gc.collect()
 
-csv_header = b'time,temp,humid,analog11,analog12,analog31,analog32\n'
+csv_header = b'T:unix_timestamp,temp,humid,analog11,analog12,analog31,analog32\n'
 
 async def measurements_as_csv(encapsulation):
 
     n = hi - lo  # number of measurements
     if hi < lo: n += size
 
-    await encapsulation.start(len(csv_header) + n * (10 + nsensors * 6))  # total length in bytes
+    await encapsulation.start(len(csv_header) + n * 42)  # total length in bytes
 
     await encapsulation.add(csv_header)
 
@@ -399,7 +407,7 @@ async def measurements_as_csv(encapsulation):
         an31 = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an32 = measurements[j+10] + (measurements[j+11] << 8)
         gc.collect()
-        await encapsulation.add(bytes("%9d,%5d,%5d,%5d,%5d,%5d,%5d\n" % (measurement_time-i, t, h, an11, an12, an31, an32), 'utf-8'))
+        await encapsulation.add(bytes("%9d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, an11/65535*3.3, an12/65535*3.3, an31/65535*3.3, an32/65535*3.3), 'utf-8'))
 
     await encapsulation.end()
 
