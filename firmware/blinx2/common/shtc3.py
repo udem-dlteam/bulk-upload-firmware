@@ -199,8 +199,8 @@ class SHTC3:
         return crc & 0xFF  # return the bottom 8 bits
 
 def temp_from_raw(t):
-#    return ((4375 * t) >> 14) - 4500
-    return ((4375 * t) >> 14) - 4800
+    return ((4375 * t) >> 14) - 4500  # from spec sheet
+#    return ((4375 * t) >> 14) - 4800
 
 def humid_from_raw(h):
     return (625 * h) >> 12

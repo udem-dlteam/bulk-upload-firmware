@@ -3,13 +3,13 @@
 scl_pin_num = 18  # I2C SCL pin
 sda_pin_num = 19  # I2C SDA pin
 
-conn_pin_nums = [2, 3, sda_pin_num, scl_pin_num, 4, 5]  # 2 signals for each connector
+port_pin_nums = [2, 3, 4, 5, sda_pin_num, scl_pin_num]  # 2 signals for each port
 
-def signal_index(conn, pin):  # conn = 1..3, pin = 1..2
-    return conn*2 - pin
+def signal_index(port, pin):  # port = 1..3, pin = 1..2
+    return port*2 - pin
 
-def conn_pin_num(conn, pin):
-    return conn_pin_nums[signal_index(conn, pin)]
+def port_pin_num(port, pin):
+    return port_pin_nums[signal_index(port, pin)]
 
 LEFT = 0  # left and right buttons
 RIGHT = 1
@@ -44,4 +44,14 @@ periph_power_pin = output_pin(periph_power_pin_num)
 def periph_power(on):
     periph_power_pin.value(on)
 
-i2c = SoftI2C(output_pin(scl_pin_num), output_pin(sda_pin_num))
+periph_power(0)
+
+scl_pin = output_pin(scl_pin_num)
+sda_pin = output_pin(sda_pin_num)
+
+scl_pin.value(0)
+sda_pin.value(0)
+
+def i2c_init():
+    global i2c
+    i2c = SoftI2C(scl_pin, sda_pin)

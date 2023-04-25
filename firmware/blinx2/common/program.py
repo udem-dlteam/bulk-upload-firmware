@@ -1,10 +1,5 @@
 import blinx
-
-#------------------------------------------------------------------------------
-
-# turn on peripherals
-
-blinx.periph_power(True)
+import ubinascii
 
 #------------------------------------------------------------------------------
 
@@ -14,6 +9,12 @@ import time
 
 def get_time():
     return time.time()
+
+#------------------------------------------------------------------------------
+
+# turn on peripherals
+
+blinx.periph_power(1)
 
 #------------------------------------------------------------------------------
 
@@ -28,6 +29,10 @@ def screen_init():
 def screen_write(line, text):
     screen.fill_rect(0, line*8, 128, 8, 0)
     screen.text(text, 0, line*8, 1)
+
+time.sleep_ms(10)
+
+blinx.i2c_init()
 
 screen_init()
 
@@ -86,11 +91,11 @@ async def wlan_connect_loop(wl):
     global wlan
     elapsed = 0
     while True:
-        print(elapsed)
+        await uasyncio.sleep_ms(250)
         blinx.led_pin.value(elapsed & 1)
         if wl.isconnected(): break
-        await uasyncio.sleep_ms(250)
         elapsed += 1
+        print(elapsed)
     print("connected to WLAN after",elapsed*0.25,"secs")
     blinx.led_pin.value(0) # led on
     print(wl.ifconfig())
@@ -109,27 +114,33 @@ def wlan_disconnect():
 
 # web server
 
-class RequestReader:
+class AsyncReader:
 
     def __init__(self, rstream):
         self.rstream = rstream
         self.buf = bytearray(10)
         self.lo = 0
         self.hi = 0
+        self.remaining_bytes = 999999
 
     async def read_byte(self):
-        if self.lo < self.hi:
-            byte = self.buf[self.lo]
-            self.lo += 1
+        if self.remaining_bytes <= 0:
+            return -1  # EOF
         else:
-            n = await self.rstream.readinto(self.buf)
-            if n > 0:
-                byte = self.buf[0]
-                self.lo = 1
-                self.hi = n
+            if self.lo < self.hi:
+                byte = self.buf[self.lo]
+                self.lo += 1
             else:
-                return -1  # EOF
-        return byte
+                n = await self.rstream.readinto(self.buf)
+                if n > 0:
+                    byte = self.buf[0]
+                    self.lo = 1
+                    self.hi = n
+                else:
+                    self.remaining_bytes = 0
+                    return -1  # EOF
+            self.remaining_bytes -= 1
+            return byte
 
     async def expect(self, seq):
         for i in range(len(seq)):
@@ -143,22 +154,58 @@ class RequestReader:
         while len(result) < 100:
             byte = await self.read_byte()
             if byte <= 0x20: break
-            result += bytes([byte])
+            result += chr(byte)
         if byte == ender:
             return result
         else:
             return b''
 
-    async def read_to_end(self):
-        state = 0
-        while state < 4:
-            byte = await self.read_byte()
-            if byte == (10 if state & 1 else 13):
-                state += 1
-            elif byte >= 0:
-                state = 0
-            else:
+    async def read_header_attribute(self, attribute):
+        attribute_value = -1
+        state = 2  # CR-LF seen
+        byte = await self.read_byte()
+        while True:
+            if byte < 0:
                 break  # EOF
+            elif byte == 10:
+                state = ((state>>1)+1)*2
+                if state == 4:
+                    break  # empty line
+            elif byte == 13 and (state & 1) == 0:
+                state += 1
+            elif state == 2:  # at start of line
+                state = 0
+                i = 0
+                while i < len(attribute):
+                    if byte >= 65 and byte <= 90: byte += 32  # lower case
+                    if byte != attribute[i]:
+                        break
+                    byte = await self.read_byte()
+                    i += 1
+                if i < len(attribute):
+                    continue
+                if byte == 32:  # optional space
+                    byte = await self.read_byte()
+                if byte >= 48 and byte <= 57:  # 0-9
+                    attribute_value = 0
+                    while byte >= 48 and byte <= 57:
+                        attribute_value = attribute_value*10 + byte - 48
+                        byte = await self.read_byte()
+                    if not (byte == -1 or byte == 10 or byte == 13):
+                        attribute_value = -1
+                continue
+            else:
+                state = 0
+            byte = await self.read_byte()
+        return attribute_value
+
+    async def read_to_eof(self):
+        content = b''
+        while True:
+            byte = await self.read_byte()
+            if byte < 0: break
+            content += chr(byte)
+        return content
 
 async def web_server():
 
@@ -166,17 +213,20 @@ async def web_server():
 
         print('handle_client_connection')
 
-        rr = RequestReader(rstream)
+        ar = AsyncReader(rstream)
 
-        if not await rr.expect(b'GET '):
+        if not await ar.expect(b'GET '):
             wstream.write(b'HTTP/1.1 405 Method Not Allowed\r\n')
         else:
-            doc = await rr.read_group(0x20)  # group must be followed by a space
-            if not (doc and await rr.expect(b'HTTP/1.1\r\n')):
+            doc = await ar.read_group(0x20)  # group must be followed by a space
+            if not (doc and await ar.expect(b'HTTP/1.1\r\n')):
                 wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
             else:
 
-                await rr.read_to_end()  # important to avoid "connection reset" errors
+                # important to avoid "connection reset" errors
+                content_length = await ar.read_header_attribute(b'content-length:')
+                ar.remaining_bytes = content_length
+                content = await ar.read_to_eof()
 
                 q = doc.find(b'?')  # find first '?' if any
                 if q < 0:
@@ -191,10 +241,44 @@ async def web_server():
                 else:
                     encapsulation = NoEncapsulation(wstream)
 
-                if q < len(doc):
-                    print('query =', str(doc[q:], 'utf-8'))
+                n = 999999
 
-                await measurements_as_csv(encapsulation)
+                if q < len(doc):
+                    if doc[q:q+7] == b'seqnum=':
+                        q += 7
+                        q = doc.find(b'&', q) + 1
+                        if q == 0:
+                            q = len(doc)
+                    if doc[q:q+8] == b'content=':
+                        q += 8
+                        start = q
+                        q = doc.find(b'&', q)
+                        if q < 0:
+                            q = len(doc)
+                        content = ubinascii.a2b_base64(doc[start:q])
+                        if q < len(doc):
+                            q += 1
+                    if doc[q:q+2] == b'n=':
+                        q += 2
+                        n = 0
+                        while q < len(doc):
+                            byte = doc[q]
+                            if byte >= 48 and byte <= 57:
+                                n = n*10 + (byte - 48)
+                                q += 1
+                            else:
+                                break
+                        q = doc.find(b'&', q) + 1
+                        if q == 0:
+                            q = len(doc)
+
+                    print('query =', str(doc[q:], 'utf-8'))
+                    print('content =', str(content, 'utf-8'))
+
+                if doc == b'/':
+                    await main_page(encapsulation)
+                else:
+                    await measurements_as_csv(encapsulation, n)
 
         await wstream.drain()
         await wstream.wait_closed()
@@ -204,18 +288,91 @@ async def web_server():
     wlan_start_connect()
     await wlan_connected.wait()
     if wlan:
-        await uasyncio.sleep_ms(5000)
-        ntptime.settime()  # get time from NTP server
+#        sync_ntptime()
         gc.collect()
+        uasyncio.create_task(settime_from_unixtime_servers())
         uasyncio.create_task(uasyncio.start_server(handle_client_connection, '0.0.0.0', 80))
+
+unixtime_servers = (
+    ('blinx.codeboot.org', 80, b'/cgi-bin/unixtime.cmd'),
+    ('worldtimeapi.org', 80, b'/api/timezone/Etc/UTC.txt'),
+    )
+
+async def settime_from_unixtime_servers():
+    i = 0
+    while True:
+        unixtime_server = unixtime_servers[i]
+        i = (i+1) % len(unixtime_servers)
+        host = unixtime_server[0]
+        port = unixtime_server[1]
+        path = unixtime_server[2]
+        print('trying to connect to ' + host)
+#        rstream, wstream = await uasyncio.create_task(uasyncio.open_connection('worldtimeapi.org', 80))
+        rstream = None
+        try:
+            rstream, wstream = await uasyncio.create_task(uasyncio.open_connection(host, port))
+        except Exception as e:
+            print('e =', repr(e))
+        if rstream is None:
+            print('could not connect to ' + host)
+            await uasyncio.sleep_ms(1000)
+        else:
+            print('connected to ' + host)
+            ar = AsyncReader(rstream)
+            wstream.write(b'GET ')
+            wstream.write(path)
+            wstream.write(b' HTTP/1.1\r\n\r\n')
+            await wstream.drain()
+            content_length = await ar.read_header_attribute(b'content-length:')
+            ar.remaining_bytes = content_length
+            unixtime = await ar.read_header_attribute(b'unixtime:')
+            wstream.close()
+            if unixtime > 0:
+                print('unixtime =', unixtime)
+                settime(unixtime)
+                return
+            await uasyncio.sleep_ms(4000)
+
+def settime(t):
+
+    import machine, utime
+
+    tm = utime.gmtime(t)
+    machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+
+def sync_ntptime():
+    ntp_servers = ('pool.ntp.org', '142.112.54.28', '216.6.2.70', '206.108.0.131', '206.108.0.132')
+    i = 0
+    n = 10
+    while n > 0:
+        ntptime.ntphost = ntp_servers[i]
+        print('trying', ntptime.ntphost)
+        try:
+            ntptime.settime()  # get time from NTP server
+            print('time synced!')
+            return
+        except Exception as e:
+            print('exception', e)
+            i = (i+1) % len(ntp_servers)
+            n -= 1
+    print('failed to sync time using ntp server')
+
+async def main_page(encapsulation):
+    # TODO: add query to URL so that codeboot knows my name and address
+    content = '<meta http-equiv="Refresh" content="0; url=&quot;https://blinx.codeboot.org&quot;"/>'
+    await encapsulation.start(b'text/html', len(content))
+    await encapsulation.add(content)
+    await encapsulation.end()
 
 class NoEncapsulation:
 
     def __init__(self, wstream):
         self.wstream = wstream
 
-    async def start(self, nbytes):
-        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
+    async def start(self, type, nbytes):
+        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
+        self.wstream.write(type)
+        self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
         self.wstream.write(bytes(str(nbytes), 'utf-8'))
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         await self.wstream.drain()
@@ -243,7 +400,7 @@ class PNGEncapsulation:
         self.b = 0
         self.padding = 0
 
-    async def start(self, nbytes):
+    async def start(self, type, nbytes):
         self.padding = 2 - nbytes % 3  # bytes ignored at end
         nbytes_div3 = (nbytes + 3) // 3
         nbytes = nbytes_div3 * 3
@@ -316,10 +473,10 @@ from shtc3 import SHTC3, temp_from_raw, humid_from_raw
 from machine import ADC
 
 shtc3_sensor = SHTC3()
-adc11 = ADC(blinx.input_pin(blinx.conn_pin_num(1,1)), atten=ADC.ATTN_11DB)
-adc12 = ADC(blinx.input_pin(blinx.conn_pin_num(1,2)), atten=ADC.ATTN_11DB)
-adc31 = ADC(blinx.input_pin(blinx.conn_pin_num(3,1)), atten=ADC.ATTN_11DB)
-adc32 = ADC(blinx.input_pin(blinx.conn_pin_num(3,2)), atten=ADC.ATTN_11DB)
+adc1a = ADC(blinx.input_pin(blinx.port_pin_num(1,1)), atten=ADC.ATTN_11DB)
+adc1b = ADC(blinx.input_pin(blinx.port_pin_num(1,2)), atten=ADC.ATTN_11DB)
+adc2a = ADC(blinx.input_pin(blinx.port_pin_num(2,1)), atten=ADC.ATTN_11DB)
+adc2b = ADC(blinx.input_pin(blinx.port_pin_num(2,2)), atten=ADC.ATTN_11DB)
 
 def analog(adc):
     return (adc.read_u16() + adc.read_u16() + adc.read_u16() + adc.read_u16() + 2) >> 2
@@ -344,34 +501,34 @@ async def sensor_reader():
         measurement_time = get_time()
         t = 0
         h = 0
-        an11 = 0
-        an12 = 0
-        an31 = 0
-        an32 = 0
+        an1a = 0
+        an1b = 0
+        an2a = 0
+        an2b = 0
         for i in range(nsamples):
             m = shtc3_sensor.measurements
             t += m[0]
             h += m[1]
-            an11 += analog(adc11)
-            an12 += analog(adc12)
-            an31 += analog(adc31)
-            an32 += analog(adc32)
+            an1a += analog(adc1a)
+            an1b += analog(adc1b)
+            an2a += analog(adc2a)
+            an2b += analog(adc2b)
         t = t // nsamples
         h = h // nsamples
-        an11 = an11 // nsamples
-        an12 = an12 // nsamples
-        an31 = an31 // nsamples
-        an32 = an32 // nsamples
+        an1a = an1a // nsamples
+        an1b = an1b // nsamples
+        an2a = an2a // nsamples
+        an2b = an2b // nsamples
 
         hi += 1
         if hi == size: hi = 0
         j = hi * bytes_per_measurement
         measurements[j+ 0] = t    & 0xff; measurements[j+ 1] = t >> 8
         measurements[j+ 2] = h    & 0xff; measurements[j+ 3] = h >> 8
-        measurements[j+ 4] = an11 & 0xff; measurements[j+ 5] = an11 >> 8
-        measurements[j+ 6] = an12 & 0xff; measurements[j+ 7] = an12 >> 8
-        measurements[j+ 8] = an31 & 0xff; measurements[j+ 9] = an31 >> 8
-        measurements[j+10] = an32 & 0xff; measurements[j+11] = an32 >> 8
+        measurements[j+ 4] = an1a & 0xff; measurements[j+ 5] = an1a >> 8
+        measurements[j+ 6] = an1b & 0xff; measurements[j+ 7] = an1b >> 8
+        measurements[j+ 8] = an2a & 0xff; measurements[j+ 9] = an2a >> 8
+        measurements[j+10] = an2b & 0xff; measurements[j+11] = an2b >> 8
         if lo == hi:
             lo += 1
             if lo == size: lo = 0
@@ -381,14 +538,17 @@ async def sensor_reader():
 
         gc.collect()
 
-csv_header = b'T:unix_timestamp,temp,humid,analog11,analog12,analog31,analog32\n'
+csv_header = b'T:unix_timestamp,temp,humid,analog1a,analog1b,analog2a,analog2b\n'
 
-async def measurements_as_csv(encapsulation):
+async def measurements_as_csv(encapsulation, n):
 
-    n = hi - lo  # number of measurements
-    if hi < lo: n += size
+    avail = hi - lo
+    if avail < 0: avail += size
+    n = min(n, avail)  # number of measurements
 
-    await encapsulation.start(len(csv_header) + n * 42)  # total length in bytes
+    print('measurements_as_csv', n)
+
+    await encapsulation.start(b'text/plain', len(csv_header) + n * 43)  # total length in bytes
 
     await encapsulation.add(csv_header)
 
@@ -402,14 +562,19 @@ async def measurements_as_csv(encapsulation):
         t    = temp_from_raw(t)
         h    = measurements[j+ 2] + (measurements[j+ 3] << 8)
         h    = humid_from_raw(h)
-        an11 = measurements[j+ 4] + (measurements[j+ 5] << 8)
-        an12 = measurements[j+ 6] + (measurements[j+ 7] << 8)
-        an31 = measurements[j+ 8] + (measurements[j+ 9] << 8)
-        an32 = measurements[j+10] + (measurements[j+11] << 8)
+        an1a = measurements[j+ 4] + (measurements[j+ 5] << 8)
+        an1b = measurements[j+ 6] + (measurements[j+ 7] << 8)
+        an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
+        an2b = measurements[j+10] + (measurements[j+11] << 8)
         gc.collect()
-        await encapsulation.add(bytes("%9d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, an11/65535*3.3, an12/65535*3.3, an31/65535*3.3, an32/65535*3.3), 'utf-8'))
+        row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
+#        print(row)
+        await encapsulation.add(row)
 
     await encapsulation.end()
+
+def volt_from_raw(n):
+    return (n+397)/23030
 
 #------------------------------------------------------------------------------
 
