@@ -144,6 +144,7 @@ def upload(port, dir, firmware, device_id, start, config, dev, chip, mac):
         dev._port.close()  # release serial port so esptool and ampy can use it
 
         esptool_run(['--port', port, '--baud', baud, 'erase_flash'])
+        time.sleep(1)  # for the write_flash work
         esptool_run(['--port', port, '--baud', baud, 'write_flash', '-z', '0x0', bin_file])
 
 
