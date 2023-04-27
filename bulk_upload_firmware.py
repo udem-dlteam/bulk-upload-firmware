@@ -140,11 +140,12 @@ def upload(port, dir, firmware, device_id, start, config, dev, chip, mac):
 
         baud = '460800'
         baud = '115200'  # play it safe (seems to cause problems on Windows running under Parallels desktop)
+        
+        dev._port.close()  # release serial port so esptool and ampy can use it
 
         esptool_run(['--port', port, '--baud', baud, 'erase_flash'])
         esptool_run(['--port', port, '--baud', baud, 'write_flash', '-z', '0x0', bin_file])
 
-        dev._port.close()  # release serial port so ampy can use it
 
         delay = '0.3'
         baud = '115200'
