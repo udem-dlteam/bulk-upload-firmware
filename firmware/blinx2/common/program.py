@@ -713,7 +713,7 @@ def analog(adc):
 
 size = 300+1
 measurement_time = get_time()
-lo = 0 # 1
+lo = 1
 hi = 0
 
 nsamples = 4
