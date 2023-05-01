@@ -126,9 +126,8 @@ class AsyncWriter:
         while True:
             diff = self.sizeBuf - (self.size + l)
             if diff <= 0:
-                for i in range(l+diff):
-                    self.buf[self.size] = data[y + i]
-                    self.size += 1
+                self.buf[self.size:self.size + l + diff] = data[y:y + l + diff]
+                self.size += l + diff
 
                 self.wstream.write(self.buf)
                 await self.wstream.drain()
@@ -140,12 +139,11 @@ class AsyncWriter:
                 y = L+diff
             else:
                 #print(self.size, y, l, L)#self.buf, )
-                for i in range(l):
-                    self.buf[self.size] = data[y + i]
-                    self.size += 1
+                self.buf[self.size:self.size + l] = data[y:]
+                self.size += l
                 break
     async def drain(self):
-        self.wstream.write(self.buf)
+        self.wstream.write(self.buf[:self.size])
         await self.wstream.drain()
         self.size = 0
         self.buf = bytearray(1400)
@@ -715,7 +713,7 @@ def analog(adc):
 
 size = 300+1
 measurement_time = get_time()
-lo = 1
+lo = 0 # 1
 hi = 0
 
 nsamples = 4
