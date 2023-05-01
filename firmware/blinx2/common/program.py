@@ -126,24 +126,25 @@ class AsyncWriter:
         while True:
             diff = self.sizeBuf - (self.size + l)
             if diff <= 0:
-                self.buf[self.size:self.size + l + diff] = data[y:y + l + diff]
-                self.size += l + diff
+                for i in range(l+diff):
+                    self.buf[self.size] = data[y + i]
+                    self.size += 1
 
                 self.wstream.write(self.buf)
                 await self.wstream.drain()
                 self.size = 0
                 self.buf = bytearray(1400)
                 
-                #print(l, diff, L)
                 l = -diff
                 y = L+diff
             else:
-                #print(self.size, y, l, L)#self.buf, )
-                self.buf[self.size:self.size + l] = data[y:]
-                self.size += l
+                print(self.size, y, l, L)#self.buf, )
+                for i in range(l):
+                    self.buf[self.size] = data[y + i]
+                    self.size += 1
                 break
     async def drain(self):
-        self.wstream.write(self.buf[:self.size])
+        self.wstream.write(self.buf)
         await self.wstream.drain()
         self.size = 0
         self.buf = bytearray(1400)
