@@ -540,19 +540,19 @@ class NoEncapsulation:
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         self.size += 24
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     async def add(self, data):
         self.wstream.write(data)
         self.size += len(data)
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     async def end(self):
-        await self.wstream.drain()
         self.size = 0
+        await self.wstream.drain()
         pass
 
 # convert sequence of bytes to PNG image
@@ -602,8 +602,8 @@ class PNGEncapsulation:
         self.adler_add(bytes([self.padding]))
 
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     async def add(self, data):
         self.adler_add(data)
@@ -616,8 +616,8 @@ class PNGEncapsulation:
         self.chunk_start(b'IEND', 0)  # IEND chunk
         self.chunk_end()
 
-        await self.wstream.drain()
         self.size = 0
+        await self.wstream.drain()
 
     def chunk_start(self, type, length):
         self.wstream.write(pack('>I', length))
@@ -626,23 +626,23 @@ class PNGEncapsulation:
         self.size += len(type)
         self.crc = crc32(type)
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     def chunk_add(self, data):
         self.crc = crc32(data, self.crc)
         self.wstream.write(data)
         self.size += len(data)
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     def chunk_end(self):
         self.wstream.write(pack('>I', self.crc))
         self.size += 4
         if self.size > 1400:
-            await self.wstream.drain()
             self.size = 0
+            await self.wstream.drain()
 
     def adler_start(self):
         self.a = 1
