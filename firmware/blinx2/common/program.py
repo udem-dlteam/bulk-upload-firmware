@@ -113,6 +113,42 @@ def wlan_disconnect():
 #------------------------------------------------------------------------------
 
 # web server
+class AsyncWriter:
+    def __init__(self, wstream, size = 1400):
+        self.wstream = wstream
+        self.sizeBuf = size
+        self.buf = bytearray(self.sizeBuf)
+        self.size = 0
+    async def write(self, data):
+        L = len(data)
+        l = L
+        y = 0
+        while True:
+            diff = self.sizeBuf - (self.size + l)
+            if diff <= 0:
+                for i in range(l+diff):
+                    self.buf[self.size] = data[y + i]
+                    self.size += 1
+
+                self.wstream.write(self.buf)
+                await self.wstream.drain()
+                self.size = 0
+                self.buf = bytearray(1400)
+                
+                #print(l, diff, L)
+                l = -diff
+                y = L+diff
+            else:
+                #print(self.size, y, l, L)#self.buf, )
+                for i in range(l):
+                    self.buf[self.size] = data[y + i]
+                    self.size += 1
+                break
+    async def drain(self):
+        self.wstream.write(self.buf)
+        await self.wstream.drain()
+        self.size = 0
+        self.buf = bytearray(1400)
 
 class AsyncReader:
 
@@ -260,12 +296,13 @@ async def web_server():
                         f.write(content)
                         f.close()
                         #del f, name, format, content
+
+                        await encapsulation.start(b'text/plain', 0)  # total length in bytes
+                        await encapsulation.add(b"")
+                        await encapsulation.end()
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
-                    await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                    await encapsulation.add(b"")
-                    await encapsulation.end()
                 elif doc[q:q+5] == b'read=':
                     print("read")
                     codeBoot = False
@@ -298,16 +335,16 @@ async def web_server():
                     
                         if size < 0: size = 0
                         if size > 4000 : size = 4000
-
+                        
+                        await encapsulation.start(b'text/plain', size)  # total length in bytes
+                        for _ in range(100):
+                            await encapsulation.add(f.read(40))
+                        f.close()
+                        #del f, name, size
+                        await encapsulation.end()
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
-                    await encapsulation.start(b'text/plain', size)  # total length in bytes
-                    for _ in range(100):
-                        await encapsulation.add(f.read(40))
-                    f.close()
-                    #del f, name, size
-                    await encapsulation.end()
                 elif doc[q:q+7] == b'remove=':
                     print("remove")
                     codeBoot = False
@@ -323,12 +360,12 @@ async def web_server():
                     try:
                         os.remove(name)
                         #del name
+                        
+                        await encapsulation.start(b'text/plain', 0)  # total length in bytes
+                        await encapsulation.add(b"")
+                        await encapsulation.end()
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-
-                    await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                    await encapsulation.add(b"")
-                    await encapsulation.end()
                 elif doc[q:q+6] == b'liste=':
                     print("liste")
                     codeBoot = False
@@ -346,14 +383,14 @@ async def web_server():
                         t = os.listdir(dir)
                         for i in t:
                             size += len(bytes(i, "utf-8")) + 1
+
+                        await encapsulation.start(b'text/plain', size)  # total length in bytes
+                        for i in t:
+                            await encapsulation.add(bytes(i + '\n', "utf-8"))
+                        #del dir, t
+                        await encapsulation.end()
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-
-                    await encapsulation.start(b'text/plain', size)  # total length in bytes
-                    for i in t:
-                        await encapsulation.add(bytes(i + '\n', "utf-8"))
-                    #del dir, t
-                    await encapsulation.end()
                 elif doc[q:q+2] == b'sensors_stop=':
                     print("sensors_stop")
                     pass
@@ -523,36 +560,36 @@ async def main_page(encapsulation):
 class NoEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = wstream
-        self.size = 0
+        self.wstream = AsyncWriter(wstream)
+        #self.size = 0
 
     async def start(self, type, nbytes):
-        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
-        self.size += 31
-        self.wstream.write(type)
-        self.size += len(type)
-        self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        self.size += 50
-        t = bytes(str(nbytes), 'utf-8')
-        self.wstream.write(t)
-        self.size += len(t)
+        await self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
+        #self.size += 31
+        await self.wstream.write(type)
+        #self.size += len(type)
+        await self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
+        #self.size += 50
+        await self.wstream.write(bytes(str(nbytes), 'utf-8'))
+        #self.size += len(t)
         #del t
-        self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
-        self.size += 24
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        await self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
+        #self.size += 24
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     async def add(self, data):
-        self.wstream.write(data)
-        self.size += len(data)
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        await self.wstream.write(data)
+        #self.size += len(data)
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     async def end(self):
-        self.size = 0
         await self.wstream.drain()
+        #self.size = 0
+        #await self.wstream.drain()
         pass
 
 # convert sequence of bytes to PNG image
@@ -565,28 +602,27 @@ png_overhead = 69  # bytes added by PNG encapsulation
 class PNGEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = wstream
+        self.wstream = AsyncWriter(wstream)
         self.crc = 0
         self.a = 0
         self.b = 0
         self.padding = 0
-        self.size = 0
+        #self.size = 0
 
     async def start(self, type, nbytes):
         self.padding = 2 - nbytes % 3  # bytes ignored at end
         nbytes_div3 = (nbytes + 3) // 3
         nbytes = nbytes_div3 * 3
-        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        self.size += 92
-        t = bytes(str(nbytes + png_overhead), 'utf-8')
-        self.wstream.write(t)
-        self.size += len(t)
+        await self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
+        #self.size += 92
+        await self.wstream.write(bytes(str(nbytes + png_overhead), 'utf-8'))
+        #self.size += len(t)
         #del t
-        self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
-        self.size += 24
+        await self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
+        #self.size += 24
 
-        self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
-        self.size += 8
+        await self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
+        #self.size += 8
 
         self.chunk_start(b'IHDR', 13)  # IHDR chunk
         self.chunk_add(pack('>II', nbytes_div3, 1))
@@ -601,9 +637,9 @@ class PNGEncapsulation:
         self.adler_add(b'\x00')
         self.adler_add(bytes([self.padding]))
 
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     async def add(self, data):
         self.adler_add(data)
@@ -620,29 +656,29 @@ class PNGEncapsulation:
         await self.wstream.drain()
 
     def chunk_start(self, type, length):
-        self.wstream.write(pack('>I', length))
-        self.size += 4
-        self.wstream.write(type)
-        self.size += len(type)
+        await self.wstream.write(pack('>I', length))
+        #self.size += 4
+        await self.wstream.write(type)
+        #self.size += len(type)
         self.crc = crc32(type)
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     def chunk_add(self, data):
         self.crc = crc32(data, self.crc)
-        self.wstream.write(data)
-        self.size += len(data)
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        await self.wstream.write(data)
+        #self.size += len(data)
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     def chunk_end(self):
-        self.wstream.write(pack('>I', self.crc))
-        self.size += 4
-        if self.size > 500:
-            self.size = 0
-            await self.wstream.drain()
+        await self.wstream.write(pack('>I', self.crc))
+        #self.size += 4
+        #if self.size > 500:
+        #    self.size = 0
+        #    await self.wstream.drain()
 
     def adler_start(self):
         self.a = 1
@@ -749,7 +785,7 @@ async def measurements_as_csv(encapsulation, name, n):
     await encapsulation.add(csv_header)
 
     i = n
-    row = b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    #row = b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
     while i > 0:
         i -= 1
         j = hi - i
@@ -764,8 +800,8 @@ async def measurements_as_csv(encapsulation, name, n):
         an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an2b = measurements[j+10] + (measurements[j+11] << 8)
         #gc.collect()
-        #row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
-#        print(row)
+        row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
+        #print(row)
         await encapsulation.add(row)
 
     await encapsulation.end()
