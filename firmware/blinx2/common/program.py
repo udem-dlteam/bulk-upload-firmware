@@ -539,14 +539,14 @@ class NoEncapsulation:
         #del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         self.size += 24
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
     async def add(self, data):
         self.wstream.write(data)
         self.size += len(data)
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
@@ -601,7 +601,7 @@ class PNGEncapsulation:
         self.adler_add(b'\x00')
         self.adler_add(bytes([self.padding]))
 
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
@@ -625,7 +625,7 @@ class PNGEncapsulation:
         self.wstream.write(type)
         self.size += len(type)
         self.crc = crc32(type)
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
@@ -633,14 +633,14 @@ class PNGEncapsulation:
         self.crc = crc32(data, self.crc)
         self.wstream.write(data)
         self.size += len(data)
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
     def chunk_end(self):
         self.wstream.write(pack('>I', self.crc))
         self.size += 4
-        if self.size > 1400:
+        if self.size > 500:
             self.size = 0
             await self.wstream.drain()
 
@@ -744,11 +744,12 @@ async def measurements_as_csv(encapsulation, name, n):
 
     print('measurements_as_csv', n)
 
-    await encapsulation.start(b'text/plain', len(csv_header) + n * 43)  # total length in bytes
+    await encapsulation.start(b'text/plain', len(csv_header) + n * 1001)#43)  # total length in bytes
 
     await encapsulation.add(csv_header)
 
     i = n
+    row = b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
     while i > 0:
         i -= 1
         j = hi - i
@@ -763,7 +764,7 @@ async def measurements_as_csv(encapsulation, name, n):
         an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an2b = measurements[j+10] + (measurements[j+11] << 8)
         #gc.collect()
-        row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
+        #row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
 #        print(row)
         await encapsulation.add(row)
 
