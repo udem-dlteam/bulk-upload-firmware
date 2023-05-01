@@ -138,7 +138,6 @@ class AsyncWriter:
                 l = -diff
                 y = L+diff
             else:
-                print(self.size, y, l, L)#self.buf, )
                 for i in range(l):
                     self.buf[self.size] = data[y + i]
                     self.size += 1
