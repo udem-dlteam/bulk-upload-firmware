@@ -259,7 +259,7 @@ async def web_server():
                         f = open(name, format)
                         f.write(content)
                         f.close()
-                        del f, name, format, content
+                        #del f, name, format, content
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
@@ -306,7 +306,7 @@ async def web_server():
                     for _ in range(100):
                         await encapsulation.add(f.read(40))
                     f.close()
-                    del f, name, size
+                    #del f, name, size
                     await encapsulation.end()
                 elif doc[q:q+7] == b'remove=':
                     print("remove")
@@ -322,7 +322,7 @@ async def web_server():
                     
                     try:
                         os.remove(name)
-                        del name
+                        #del name
                     except :
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
@@ -352,7 +352,7 @@ async def web_server():
                     await encapsulation.start(b'text/plain', size)  # total length in bytes
                     for i in t:
                         await encapsulation.add(bytes(i + '\n', "utf-8"))
-                    del dir, t
+                    #del dir, t
                     await encapsulation.end()
                 elif doc[q:q+2] == b'sensors_stop=':
                     print("sensors_stop")
@@ -445,7 +445,7 @@ async def web_server():
     await wlan_connected.wait()
     if wlan:
 #        sync_ntptime()
-        gc.collect()
+        #gc.collect()
         uasyncio.create_task(settime_from_unixtime_servers())
         uasyncio.create_task(uasyncio.start_server(handle_client_connection, '0.0.0.0', 80))
 
@@ -536,17 +536,17 @@ class NoEncapsulation:
         t = bytes(str(nbytes), 'utf-8')
         self.wstream.write(t)
         self.size += len(t)
-        del t
+        #del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         self.size += 24
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
     async def add(self, data):
         self.wstream.write(data)
         self.size += len(data)
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
@@ -581,7 +581,7 @@ class PNGEncapsulation:
         t = bytes(str(nbytes + png_overhead), 'utf-8')
         self.wstream.write(t)
         self.size += len(t)
-        del t
+        #del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         self.size += 24
 
@@ -601,7 +601,7 @@ class PNGEncapsulation:
         self.adler_add(b'\x00')
         self.adler_add(bytes([self.padding]))
 
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
@@ -625,7 +625,7 @@ class PNGEncapsulation:
         self.wstream.write(type)
         self.size += len(type)
         self.crc = crc32(type)
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
@@ -633,14 +633,14 @@ class PNGEncapsulation:
         self.crc = crc32(data, self.crc)
         self.wstream.write(data)
         self.size += len(data)
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
     def chunk_end(self):
         self.wstream.write(pack('>I', self.crc))
         self.size += 4
-        if self.size > 1000:
+        if self.size > 1400:
             await self.wstream.drain()
             self.size = 0
 
@@ -679,7 +679,7 @@ def analog(adc):
 
 size = 300+1
 measurement_time = get_time()
-lo = 0
+lo = 1
 hi = 0
 
 nsamples = 4
@@ -732,7 +732,7 @@ async def sensor_reader():
         screen_write(3, "T=%5.1f  H=%5.1f" % (temp_from_raw(t)/100, humid_from_raw(h)/100))
         screen.show()
 
-        gc.collect()
+        #gc.collect()
 
 csv_header = b'T:unix_timestamp,temp,humid,analog1a,analog1b,analog2a,analog2b\n'
 
@@ -762,7 +762,7 @@ async def measurements_as_csv(encapsulation, name, n):
         an1b = measurements[j+ 6] + (measurements[j+ 7] << 8)
         an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an2b = measurements[j+10] + (measurements[j+11] << 8)
-        gc.collect()
+        #gc.collect()
         row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
 #        print(row)
         await encapsulation.add(row)
