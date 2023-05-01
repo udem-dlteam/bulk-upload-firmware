@@ -558,27 +558,27 @@ async def main_page(encapsulation):
 class NoEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = AsyncWriter(wstream)
+        self.wstream = wstream #AsyncWriter(wstream)
         #self.size = 0
 
     async def start(self, type, nbytes):
-        await self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
+        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
         #self.size += 31
-        await self.wstream.write(type)
+        self.wstream.write(type)
         #self.size += len(type)
-        await self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
+        self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
         #self.size += 50
-        await self.wstream.write(bytes(str(nbytes), 'utf-8'))
+        self.wstream.write(bytes(str(nbytes), 'utf-8'))
         #self.size += len(t)
         #del t
-        await self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
+        self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         #self.size += 24
         #if self.size > 500:
         #    self.size = 0
         #    await self.wstream.drain()
 
     async def add(self, data):
-        await self.wstream.write(data)
+        self.wstream.write(data)
         #self.size += len(data)
         #if self.size > 500:
         #    self.size = 0
@@ -600,7 +600,7 @@ png_overhead = 69  # bytes added by PNG encapsulation
 class PNGEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = AsyncWriter(wstream)
+        self.wstream = wstream # AsyncWriter(wstream)
         self.crc = 0
         self.a = 0
         self.b = 0
@@ -611,15 +611,15 @@ class PNGEncapsulation:
         self.padding = 2 - nbytes % 3  # bytes ignored at end
         nbytes_div3 = (nbytes + 3) // 3
         nbytes = nbytes_div3 * 3
-        await self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
+        self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
         #self.size += 92
-        await self.wstream.write(bytes(str(nbytes + png_overhead), 'utf-8'))
+        self.wstream.write(bytes(str(nbytes + png_overhead), 'utf-8'))
         #self.size += len(t)
         #del t
-        await self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
+        self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
         #self.size += 24
 
-        await self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
+        self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
         #self.size += 8
 
         self.chunk_start(b'IHDR', 13)  # IHDR chunk
@@ -654,9 +654,9 @@ class PNGEncapsulation:
         await self.wstream.drain()
 
     def chunk_start(self, type, length):
-        await self.wstream.write(pack('>I', length))
+        self.wstream.write(pack('>I', length))
         #self.size += 4
-        await self.wstream.write(type)
+        self.wstream.write(type)
         #self.size += len(type)
         self.crc = crc32(type)
         #if self.size > 500:
@@ -665,14 +665,14 @@ class PNGEncapsulation:
 
     def chunk_add(self, data):
         self.crc = crc32(data, self.crc)
-        await self.wstream.write(data)
+        self.wstream.write(data)
         #self.size += len(data)
         #if self.size > 500:
         #    self.size = 0
         #    await self.wstream.drain()
 
     def chunk_end(self):
-        await self.wstream.write(pack('>I', self.crc))
+        self.wstream.write(pack('>I', self.crc))
         #self.size += 4
         #if self.size > 500:
         #    self.size = 0
