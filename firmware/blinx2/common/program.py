@@ -1,5 +1,5 @@
 import blinx
-import ubinascii
+import ubinascii, os
 
 #------------------------------------------------------------------------------
 
@@ -210,6 +210,182 @@ class AsyncReader:
 async def web_server():
 
     async def handle_client_connection(rstream, wstream):
+        async def register(doc, q, content, encapsulation, wstream):
+            l = len(doc)
+            print("register", q, l, doc)
+            codeBoot = True
+            if q < l:
+                if doc[q:q+7] == b'seqnum=':
+                    print("seqnum")
+                    q += 7
+                    q = doc.find(b'&', q) + 1
+                    if q == 0:
+                        q = l
+                if doc[q:q+6] == b'write=':
+                    print("write")
+                    codeBoot = False
+                    q += 6
+                    start = q
+                    q = doc.find(b'&', q)
+                    if q < 0:
+                        q = l
+                    name = str(doc[start:q], 'utf-8')
+                    if q < l:
+                        q += 1
+
+                    content = ""
+                    format = "w"
+                    if doc[q:q+8] == b'content=':
+                        print("content")
+                        q += 8
+                        start = q
+                        q = doc.find(b'&', q)
+                        if q < 0:
+                            q = l
+                        content = ubinascii.a2b_base64(doc[start:q])
+                        if q < l:
+                            q += 1
+                    if doc[q:q+7] == b'format=':
+                        print("format")
+                        q += 7
+                        start = q
+                        q = doc.find(b'&', q)
+                        if q < 0:
+                            q = l
+                        format = str(doc[start:q], 'utf-8')
+                        if q < l:
+                            q += 1
+                    try :
+                        f = open(name, format)
+                        f.write(content)
+                        f.close()
+                        del f, name, format, content
+                    except :
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+
+                    await encapsulation.start(b'text/plain', 0)  # total length in bytes
+                    await encapsulation.add(b"")
+                    await encapsulation.end()
+                elif doc[q:q+5] == b'read=':
+                    print("read")
+                    codeBoot = False
+                    q += 5
+                    start = q
+                    q = doc.find(b'&', q)
+                    if q < 0:
+                        q = l
+                    name = str(doc[start:q], 'utf-8')
+                    if q < l:
+                        q += 1
+                    rendu = 0
+                    if doc[q:q+6] == b'rendu=':
+                        print("rendu")
+                        q += 6
+                        start = q
+                        q = doc.find(b'&', q)
+                        if q < 0:
+                            q = l
+                        rendu = int(doc[start:q])
+                        if q < l:
+                            q += 1
+                    
+                    try :
+                        f = open(name, 'rb+')
+                        for _ in range(rendu):
+                            f.read(4000)
+
+                        size = os.stat(name)[6] - 4000*rendu
+                    
+                        if size < 0: size = 0
+                        if size > 4000 : size = 4000
+
+                    except :
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+
+                    await encapsulation.start(b'text/plain', size)  # total length in bytes
+                    for _ in range(100):
+                        await encapsulation.add(f.read(40))
+                    f.close()
+                    del f, name, size
+                    await encapsulation.end()
+                elif doc[q:q+7] == b'remove=':
+                    print("remove")
+                    codeBoot = False
+                    q += 7
+                    start = q
+                    q = doc.find(b'&', q)
+                    if q < 0:
+                        q = l
+                    name = str(doc[start:q], 'utf-8')
+                    if q < l:
+                        q += 1
+                    
+                    try:
+                        os.remove(name)
+                        del name
+                    except :
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+
+                    await encapsulation.start(b'text/plain', 0)  # total length in bytes
+                    await encapsulation.add(b"")
+                    await encapsulation.end()
+                elif doc[q:q+6] == b'liste=':
+                    print("liste")
+                    codeBoot = False
+                    q += 6
+                    start = q
+                    q = doc.find(b'&', q)
+                    if q < 0:
+                        q = l
+                    dir = str(doc[start:q], 'utf-8')
+                    if q < l:
+                        q += 1
+                    size = 0
+                    
+                    try:
+                        t = os.listdir(dir)
+                        for i in t:
+                            size += len(bytes(i, "utf-8")) + 1
+                    except :
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+
+                    await encapsulation.start(b'text/plain', size)  # total length in bytes
+                    for i in t:
+                        await encapsulation.add(bytes(i + '\n', "utf-8"))
+                    del dir, t
+                    await encapsulation.end()
+                elif doc[q:q+2] == b'sensors_stop=':
+                    print("sensors_stop")
+                    pass
+                elif doc[q:q+2] == b'configSensor=':
+                    print("configSensor")
+                    pass
+
+            if codeBoot :
+                print("codeBoot")
+                await main_page(encapsulation)
+        def registerGetSensor(doc, q):
+            n = 999999
+            if q < len(doc):
+                if doc[q:q+7] == b'seqnum=':
+                    q += 7
+                    q = doc.find(b'&', q) + 1
+                    if q == 0:
+                        q = len(doc)
+                if doc[q:q+2] == b'n=':
+                    q += 2
+                    n = 0
+                    while q < len(doc):
+                        byte = doc[q]
+                        if byte >= 48 and byte <= 57:
+                            n = n*10 + (byte - 48)
+                            q += 1
+                        else:
+                            break
+                    q = doc.find(b'&', q) + 1
+                    if q == 0:
+                        q = len(doc)
+            return n
 
         print('handle_client_connection')
 
@@ -232,7 +408,8 @@ async def web_server():
                 if q < 0:
                     q = len(doc)
 
-                print('doc =', str(doc[:q], 'utf-8'))
+                pathUrl = str(doc[:q], 'utf-8')
+                print('doc =', pathUrl)
 
                 q += 1
                 if q < len(doc) and doc[q] == 0x3f: # two '?' in a row?
@@ -241,44 +418,23 @@ async def web_server():
                 else:
                     encapsulation = NoEncapsulation(wstream)
 
-                n = 999999
 
-                if q < len(doc):
-                    if doc[q:q+7] == b'seqnum=':
-                        q += 7
-                        q = doc.find(b'&', q) + 1
-                        if q == 0:
-                            q = len(doc)
-                    if doc[q:q+8] == b'content=':
-                        q += 8
-                        start = q
-                        q = doc.find(b'&', q)
-                        if q < 0:
-                            q = len(doc)
-                        content = ubinascii.a2b_base64(doc[start:q])
-                        if q < len(doc):
-                            q += 1
-                    if doc[q:q+2] == b'n=':
-                        q += 2
-                        n = 0
-                        while q < len(doc):
-                            byte = doc[q]
-                            if byte >= 48 and byte <= 57:
-                                n = n*10 + (byte - 48)
-                                q += 1
-                            else:
-                                break
-                        q = doc.find(b'&', q) + 1
-                        if q == 0:
-                            q = len(doc)
-
-                    print('query =', str(doc[q:], 'utf-8'))
-                    print('content =', str(content, 'utf-8'))
-
-                if doc == b'/':
-                    await main_page(encapsulation)
+                print(pathUrl, len(pathUrl))
+                if pathUrl == "/favicon.ico":
+                    print('favicon')
+                    wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                elif pathUrl != '/' :
+                    print("sensor")
+                    pathUrl = pathUrl[1:]
+                    if pathUrl[-4:] == '.csv':
+                        pathUrl = pathUrl[:-4]
+                        n = registerGetSensor(doc, q)
+                        await measurements_as_csv(encapsulation, pathUrl, n)
+                    else:
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                 else:
-                    await measurements_as_csv(encapsulation, n)
+                    print("other")
+                    await register(doc, q, content, encapsulation, wstream)
 
         await wstream.drain()
         await wstream.wait_closed()
@@ -368,20 +524,35 @@ class NoEncapsulation:
 
     def __init__(self, wstream):
         self.wstream = wstream
+        self.size = 0
 
     async def start(self, type, nbytes):
         self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
+        self.size += 31
         self.wstream.write(type)
+        self.size += len(type)
         self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        self.wstream.write(bytes(str(nbytes), 'utf-8'))
+        self.size += 50
+        t = bytes(str(nbytes), 'utf-8')
+        self.wstream.write(t)
+        self.size += len(t)
+        del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
-        await self.wstream.drain()
+        self.size += 24
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     async def add(self, data):
         self.wstream.write(data)
-        await self.wstream.drain()
+        self.size += len(data)
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     async def end(self):
+        await self.wstream.drain()
+        self.size = 0
         pass
 
 # convert sequence of bytes to PNG image
@@ -399,16 +570,23 @@ class PNGEncapsulation:
         self.a = 0
         self.b = 0
         self.padding = 0
+        self.size = 0
 
     async def start(self, type, nbytes):
         self.padding = 2 - nbytes % 3  # bytes ignored at end
         nbytes_div3 = (nbytes + 3) // 3
         nbytes = nbytes_div3 * 3
         self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        self.wstream.write(bytes(str(nbytes + png_overhead), 'utf-8'))
+        self.size += 92
+        t = bytes(str(nbytes + png_overhead), 'utf-8')
+        self.wstream.write(t)
+        self.size += len(t)
+        del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
+        self.size += 24
 
         self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
+        self.size += 8
 
         self.chunk_start(b'IHDR', 13)  # IHDR chunk
         self.chunk_add(pack('>II', nbytes_div3, 1))
@@ -423,7 +601,9 @@ class PNGEncapsulation:
         self.adler_add(b'\x00')
         self.adler_add(bytes([self.padding]))
 
-        await self.wstream.drain()
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     async def add(self, data):
         self.adler_add(data)
@@ -436,17 +616,33 @@ class PNGEncapsulation:
         self.chunk_start(b'IEND', 0)  # IEND chunk
         self.chunk_end()
 
+        await self.wstream.drain()
+        self.size = 0
+
     def chunk_start(self, type, length):
         self.wstream.write(pack('>I', length))
+        self.size += 4
         self.wstream.write(type)
+        self.size += len(type)
         self.crc = crc32(type)
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     def chunk_add(self, data):
         self.crc = crc32(data, self.crc)
         self.wstream.write(data)
+        self.size += len(data)
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     def chunk_end(self):
         self.wstream.write(pack('>I', self.crc))
+        self.size += 4
+        if self.size > 1000:
+            await self.wstream.drain()
+            self.size = 0
 
     def adler_start(self):
         self.a = 1
@@ -540,7 +736,7 @@ async def sensor_reader():
 
 csv_header = b'T:unix_timestamp,temp,humid,analog1a,analog1b,analog2a,analog2b\n'
 
-async def measurements_as_csv(encapsulation, n):
+async def measurements_as_csv(encapsulation, name, n):
 
     avail = hi - lo
     if avail < 0: avail += size
