@@ -1,0 +1,2 @@
+ssid = 'BLINXNET'
+pwd = 'blinxnet'
