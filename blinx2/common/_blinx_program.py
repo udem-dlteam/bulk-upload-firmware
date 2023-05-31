@@ -1286,10 +1286,6 @@ async def sensor_reader():
         
         for i in range(nsensors_input_use):
             data[i] = data[i] // nsamples
-
-        hi[0] += 1
-        if hi[0] == size_data_sensors[0]: hi[0] = 0
-        j = hi[0] * bytes_per_measurement
         
         for i in range(nsensors_input_use):
             measurements[0][j + 2*i] = data[i] & 0xff; measurements[0][j + 2*i + 1] = data[i] >> 8
@@ -1302,6 +1298,10 @@ async def sensor_reader():
                 if input_true_name[y] in list_ds1820:
                     v = input_functions_sensors[y]()
                     measurements[0][j + 2*y] = v & 0xff; measurements[0][j + 2*y + 1] = v >> 8
+
+        hi[0] += 1
+        if hi[0] == size_data_sensors[0]: hi[0] = 0
+        j = hi[0] * bytes_per_measurement
 
         if lo[0] == hi[0]:
             lo[0] += 1
