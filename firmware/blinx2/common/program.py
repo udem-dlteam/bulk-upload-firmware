@@ -1,5 +1,5 @@
 import blinx
-import ubinascii, os
+import ubinascii
 
 #------------------------------------------------------------------------------
 
@@ -113,40 +113,6 @@ def wlan_disconnect():
 #------------------------------------------------------------------------------
 
 # web server
-class AsyncWriter:
-    def __init__(self, wstream, size = 1400):
-        self.wstream = wstream
-        self.sizeBuf = size
-        self.buf = bytearray(self.sizeBuf)
-        self.size = 0
-    async def write(self, data):
-        L = len(data)
-        l = L
-        y = 0
-        while True:
-            diff = self.sizeBuf - (self.size + l)
-            if diff <= 0:
-                for i in range(l+diff):
-                    self.buf[self.size] = data[y + i]
-                    self.size += 1
-
-                self.wstream.write(self.buf)
-                await self.wstream.drain()
-                self.size = 0
-                self.buf = bytearray(1400)
-                
-                l = -diff
-                y = L+diff
-            else:
-                for i in range(l):
-                    self.buf[self.size] = data[y + i]
-                    self.size += 1
-                break
-    async def drain(self):
-        self.wstream.write(self.buf)
-        await self.wstream.drain()
-        self.size = 0
-        self.buf = bytearray(1400)
 
 class AsyncReader:
 
@@ -244,183 +210,6 @@ class AsyncReader:
 async def web_server():
 
     async def handle_client_connection(rstream, wstream):
-        async def register(doc, q, content, encapsulation, wstream):
-            l = len(doc)
-            print("register", q, l, doc)
-            codeBoot = True
-            if q < l:
-                if doc[q:q+7] == b'seqnum=':
-                    print("seqnum")
-                    q += 7
-                    q = doc.find(b'&', q) + 1
-                    if q == 0:
-                        q = l
-                if doc[q:q+6] == b'write=':
-                    print("write")
-                    codeBoot = False
-                    q += 6
-                    start = q
-                    q = doc.find(b'&', q)
-                    if q < 0:
-                        q = l
-                    name = str(doc[start:q], 'utf-8')
-                    if q < l:
-                        q += 1
-
-                    content = ""
-                    format = "w"
-                    if doc[q:q+8] == b'content=':
-                        print("content")
-                        q += 8
-                        start = q
-                        q = doc.find(b'&', q)
-                        if q < 0:
-                            q = l
-                        content = ubinascii.a2b_base64(doc[start:q])
-                        if q < l:
-                            q += 1
-                    if doc[q:q+7] == b'format=':
-                        print("format")
-                        q += 7
-                        start = q
-                        q = doc.find(b'&', q)
-                        if q < 0:
-                            q = l
-                        format = str(doc[start:q], 'utf-8')
-                        if q < l:
-                            q += 1
-                    try :
-                        f = open(name, format)
-                        f.write(content)
-                        f.close()
-                        #del f, name, format, content
-
-                        await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                        await encapsulation.add(b"")
-                        await encapsulation.end()
-                    except :
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-
-                elif doc[q:q+5] == b'read=':
-                    print("read")
-                    codeBoot = False
-                    q += 5
-                    start = q
-                    q = doc.find(b'&', q)
-                    if q < 0:
-                        q = l
-                    name = str(doc[start:q], 'utf-8')
-                    if q < l:
-                        q += 1
-                    rendu = 0
-                    if doc[q:q+6] == b'rendu=':
-                        print("rendu")
-                        q += 6
-                        start = q
-                        q = doc.find(b'&', q)
-                        if q < 0:
-                            q = l
-                        rendu = int(doc[start:q])
-                        if q < l:
-                            q += 1
-                    
-                    try :
-                        f = open(name, 'rb+')
-                        for _ in range(rendu):
-                            f.read(4000)
-
-                        size = os.stat(name)[6] - 4000*rendu
-                    
-                        if size < 0: size = 0
-                        if size > 4000 : size = 4000
-                        
-                        await encapsulation.start(b'text/plain', size)  # total length in bytes
-                        for _ in range(100):
-                            await encapsulation.add(f.read(40))
-                        f.close()
-                        #del f, name, size
-                        await encapsulation.end()
-                    except :
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-
-                elif doc[q:q+7] == b'remove=':
-                    print("remove")
-                    codeBoot = False
-                    q += 7
-                    start = q
-                    q = doc.find(b'&', q)
-                    if q < 0:
-                        q = l
-                    name = str(doc[start:q], 'utf-8')
-                    if q < l:
-                        q += 1
-                    
-                    try:
-                        os.remove(name)
-                        #del name
-                        
-                        await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                        await encapsulation.add(b"")
-                        await encapsulation.end()
-                    except :
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                elif doc[q:q+6] == b'liste=':
-                    print("liste")
-                    codeBoot = False
-                    q += 6
-                    start = q
-                    q = doc.find(b'&', q)
-                    if q < 0:
-                        q = l
-                    dir = str(doc[start:q], 'utf-8')
-                    if q < l:
-                        q += 1
-                    size = 0
-                    
-                    try:
-                        t = os.listdir(dir)
-                        for i in t:
-                            size += len(bytes(i, "utf-8")) + 1
-
-                        await encapsulation.start(b'text/plain', size)  # total length in bytes
-                        for i in t:
-                            await encapsulation.add(bytes(i + '\n', "utf-8"))
-                        #del dir, t
-                        await encapsulation.end()
-                    except :
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                elif doc[q:q+2] == b'sensors_stop=':
-                    print("sensors_stop")
-                    pass
-                elif doc[q:q+2] == b'configSensor=':
-                    print("configSensor")
-                    pass
-
-            if codeBoot :
-                print("codeBoot")
-                await main_page(encapsulation)
-        def registerGetSensor(doc, q):
-            n = 999999
-            if q < len(doc):
-                if doc[q:q+7] == b'seqnum=':
-                    q += 7
-                    q = doc.find(b'&', q) + 1
-                    if q == 0:
-                        q = len(doc)
-                if doc[q:q+2] == b'n=':
-                    q += 2
-                    n = 0
-                    while q < len(doc):
-                        byte = doc[q]
-                        if byte >= 48 and byte <= 57:
-                            n = n*10 + (byte - 48)
-                            q += 1
-                        else:
-                            break
-                    q = doc.find(b'&', q) + 1
-                    if q == 0:
-                        q = len(doc)
-            return n
 
         print('handle_client_connection')
 
@@ -443,8 +232,7 @@ async def web_server():
                 if q < 0:
                     q = len(doc)
 
-                pathUrl = str(doc[:q], 'utf-8')
-                print('doc =', pathUrl)
+                print('doc =', str(doc[:q], 'utf-8'))
 
                 q += 1
                 if q < len(doc) and doc[q] == 0x3f: # two '?' in a row?
@@ -453,23 +241,44 @@ async def web_server():
                 else:
                     encapsulation = NoEncapsulation(wstream)
 
+                n = 999999
 
-                print(pathUrl, len(pathUrl))
-                if pathUrl == "/favicon.ico":
-                    print('favicon')
-                    wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                elif pathUrl != '/' :
-                    print("sensor")
-                    pathUrl = pathUrl[1:]
-                    if pathUrl[-4:] == '.csv':
-                        pathUrl = pathUrl[:-4]
-                        n = registerGetSensor(doc, q)
-                        await measurements_as_csv(encapsulation, pathUrl, n)
-                    else:
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                if q < len(doc):
+                    if doc[q:q+7] == b'seqnum=':
+                        q += 7
+                        q = doc.find(b'&', q) + 1
+                        if q == 0:
+                            q = len(doc)
+                    if doc[q:q+8] == b'content=':
+                        q += 8
+                        start = q
+                        q = doc.find(b'&', q)
+                        if q < 0:
+                            q = len(doc)
+                        content = ubinascii.a2b_base64(doc[start:q])
+                        if q < len(doc):
+                            q += 1
+                    if doc[q:q+2] == b'n=':
+                        q += 2
+                        n = 0
+                        while q < len(doc):
+                            byte = doc[q]
+                            if byte >= 48 and byte <= 57:
+                                n = n*10 + (byte - 48)
+                                q += 1
+                            else:
+                                break
+                        q = doc.find(b'&', q) + 1
+                        if q == 0:
+                            q = len(doc)
+
+                    print('query =', str(doc[q:], 'utf-8'))
+                    print('content =', str(content, 'utf-8'))
+
+                if doc == b'/':
+                    await main_page(encapsulation)
                 else:
-                    print("other")
-                    await register(doc, q, content, encapsulation, wstream)
+                    await measurements_as_csv(encapsulation, n)
 
         await wstream.drain()
         await wstream.wait_closed()
@@ -480,7 +289,7 @@ async def web_server():
     await wlan_connected.wait()
     if wlan:
 #        sync_ntptime()
-        #gc.collect()
+        gc.collect()
         uasyncio.create_task(settime_from_unixtime_servers())
         uasyncio.create_task(uasyncio.start_server(handle_client_connection, '0.0.0.0', 80))
 
@@ -558,36 +367,21 @@ async def main_page(encapsulation):
 class NoEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = wstream #AsyncWriter(wstream)
-        #self.size = 0
+        self.wstream = wstream
 
     async def start(self, type, nbytes):
         self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: ')
-        #self.size += 31
         self.wstream.write(type)
-        #self.size += len(type)
         self.wstream.write(b'\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        #self.size += 50
         self.wstream.write(bytes(str(nbytes), 'utf-8'))
-        #self.size += len(t)
-        #del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
-        #self.size += 24
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
+        await self.wstream.drain()
 
     async def add(self, data):
         self.wstream.write(data)
-        #self.size += len(data)
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
+        await self.wstream.drain()
 
     async def end(self):
-        await self.wstream.drain()
-        #self.size = 0
-        #await self.wstream.drain()
         pass
 
 # convert sequence of bytes to PNG image
@@ -600,27 +394,21 @@ png_overhead = 69  # bytes added by PNG encapsulation
 class PNGEncapsulation:
 
     def __init__(self, wstream):
-        self.wstream = wstream # AsyncWriter(wstream)
+        self.wstream = wstream
         self.crc = 0
         self.a = 0
         self.b = 0
         self.padding = 0
-        #self.size = 0
 
     async def start(self, type, nbytes):
         self.padding = 2 - nbytes % 3  # bytes ignored at end
         nbytes_div3 = (nbytes + 3) // 3
         nbytes = nbytes_div3 * 3
         self.wstream.write(b'HTTP/1.1 200 OK\r\nContent-Type: image/x-png\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ')
-        #self.size += 92
         self.wstream.write(bytes(str(nbytes + png_overhead), 'utf-8'))
-        #self.size += len(t)
-        #del t
         self.wstream.write(b'\r\nConnection: Closed\r\n\r\n')
-        #self.size += 24
 
         self.wstream.write(b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A') # PNG signature
-        #self.size += 8
 
         self.chunk_start(b'IHDR', 13)  # IHDR chunk
         self.chunk_add(pack('>II', nbytes_div3, 1))
@@ -635,9 +423,7 @@ class PNGEncapsulation:
         self.adler_add(b'\x00')
         self.adler_add(bytes([self.padding]))
 
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
+        await self.wstream.drain()
 
     async def add(self, data):
         self.adler_add(data)
@@ -650,33 +436,17 @@ class PNGEncapsulation:
         self.chunk_start(b'IEND', 0)  # IEND chunk
         self.chunk_end()
 
-        self.size = 0
-        await self.wstream.drain()
-
     def chunk_start(self, type, length):
         self.wstream.write(pack('>I', length))
-        #self.size += 4
         self.wstream.write(type)
-        #self.size += len(type)
         self.crc = crc32(type)
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
 
     def chunk_add(self, data):
         self.crc = crc32(data, self.crc)
         self.wstream.write(data)
-        #self.size += len(data)
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
 
     def chunk_end(self):
         self.wstream.write(pack('>I', self.crc))
-        #self.size += 4
-        #if self.size > 500:
-        #    self.size = 0
-        #    await self.wstream.drain()
 
     def adler_start(self):
         self.a = 1
@@ -713,7 +483,7 @@ def analog(adc):
 
 size = 300+1
 measurement_time = get_time()
-lo = 1
+lo = 0
 hi = 0
 
 nsamples = 4
@@ -766,11 +536,11 @@ async def sensor_reader():
         screen_write(3, "T=%5.1f  H=%5.1f" % (temp_from_raw(t)/100, humid_from_raw(h)/100))
         screen.show()
 
-        #gc.collect()
+        gc.collect()
 
 csv_header = b'T:unix_timestamp,temp,humid,analog1a,analog1b,analog2a,analog2b\n'
 
-async def measurements_as_csv(encapsulation, name, n):
+async def measurements_as_csv(encapsulation, n):
 
     avail = hi - lo
     if avail < 0: avail += size
@@ -778,12 +548,11 @@ async def measurements_as_csv(encapsulation, name, n):
 
     print('measurements_as_csv', n)
 
-    await encapsulation.start(b'text/plain', len(csv_header) + n * 1001)#43)  # total length in bytes
+    await encapsulation.start(b'text/plain', len(csv_header) + n * 43)  # total length in bytes
 
     await encapsulation.add(csv_header)
 
     i = n
-    #row = b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
     while i > 0:
         i -= 1
         j = hi - i
@@ -797,9 +566,9 @@ async def measurements_as_csv(encapsulation, name, n):
         an1b = measurements[j+ 6] + (measurements[j+ 7] << 8)
         an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an2b = measurements[j+10] + (measurements[j+11] << 8)
-        #gc.collect()
+        gc.collect()
         row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
-        #print(row)
+#        print(row)
         await encapsulation.add(row)
 
     await encapsulation.end()

@@ -4,7 +4,14 @@
 #import webrepl
 #webrepl.start()
 
-from blinx import button, LEFT, RIGHT
+import os
 
-if not (button(LEFT) and button(RIGHT)):
-    import program
+# the test file exists ?
+files = os.listdir()
+if '_blinx_test.py' in files or '_blinx_test.mpy' in files:
+    import _blinx_test
+else:
+    from _blinx_blinx import button, LEFT, RIGHT
+
+    if not (button(LEFT) or button(RIGHT)):
+        import _blinx_program
