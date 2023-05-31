@@ -1307,7 +1307,6 @@ async def sensor_reader():
             lo[0] += 1
             if lo[0] == size_data_sensors[0]: lo[0] = 0
 
-        print('a',toDo_interval)
         if toDo_interval != None : # we can do an other delta time ?
             moyenneData(toDo_interval)
 
@@ -1334,7 +1333,6 @@ async def sensor_reader():
 # to do the median of the value for the next delta time
 def moyenneData(toDo_interval):
     global lo, hi, measurements, done_one
-    print('b',done_one)
     diff = offset_to_seconds[toDo_interval] / offset_to_seconds[toDo_interval-1]
     textError = ''
     if done_one[toDo_interval-1] != 0:
@@ -1343,7 +1341,6 @@ def moyenneData(toDo_interval):
                 done_one[toDo_interval] = -1
             else:
                 done_one[toDo_interval] += 1
-        print('s')
 
         hi[toDo_interval] += 1
         l = size_data_sensors[toDo_interval]
@@ -1462,7 +1459,6 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
     avail = hi[times_sensors] - lo[times_sensors]
     if avail < 0: avail += size_data_sensors[times_sensors]
     #print(avail,hi,lo,n, times_sensors)
-    print(n, avail, size_data_sensors, hi, lo)
     n = min(n, avail)  # number of measurements
 
     print('measurements_as_csv', n, input_index_sensors_look)
