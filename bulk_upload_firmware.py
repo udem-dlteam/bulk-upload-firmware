@@ -94,16 +94,16 @@ def get_mac(dev):
     except:
         return None
 
-def detect_device_and_upload_firmware(port, firmware_dir, device_id, start, config):
+def detect_device_and_upload_firmware(port, firmware_dir, device_id, start, ident):
     dev = get_device(port)
     if dev:
         chip = get_chip(dev)
         if chip:
             mac = get_mac(dev)
             if mac:
-                upload(port, firmware_dir, device_id, start, config, dev, chip, mac)
+                upload(port, firmware_dir, device_id, start, ident, dev, chip, mac)
 
-def upload(port, firmware_dir, device_id, start, config, dev, chip, mac):
+def upload(port, firmware_dir, device_id, start, ident, dev, chip, mac):
 
     chip_dir = firmware_dir + '/' + chip
 
@@ -131,9 +131,11 @@ def upload(port, firmware_dir, device_id, start, config, dev, chip, mac):
         print('###################################### ' + mac)
         print('###################################### ' + chip)
         print('###################################### ' + bin_file)
-        if config:
-            print('###################################### ' + config)
+        if ident:
+            print('###################################### ' + ident)
         print('###############################################################################')
+
+#        return
 
         baud = '460800'
         baud = '115200'  # play it safe (seems to cause problems on Windows running under Parallels desktop)
@@ -146,15 +148,15 @@ def upload(port, firmware_dir, device_id, start, config, dev, chip, mac):
         delay = '0.3'
         baud = '115200'
 
-        def generate_config():
-            filename = 'configs/' + device_id + '._blinx_config.py'
+        def generate_ident(file):
+            filename = 'idents/' + device_id + '.' + file
             f = open(filename, 'w')
             # TODO: Add other configuration variables
             f.write('id = ' + repr(device_id) + '\n')
             f.write('mac = ' + repr(mac) + '\n')
             f.write('chip = ' + repr(chip) + '\n')
-            if config:
-                f.write(config.replace('\\n','\n') + '\n')
+            if ident:
+                f.write(ident.replace('\\n','\n') + '\n')
             f.close()
             return filename
 
@@ -184,18 +186,18 @@ def upload(port, firmware_dir, device_id, start, config, dev, chip, mac):
                     mkdir(remote_path)
                     upload_dir(remote_path)
                 elif file.endswith('.py') or file.endswith('.mpy'):
-                    if file == '_flashtest.py' or file == '_flashtest.mpy':
+                    if file.endswith('_test.py'):
                         run_file = local_path
                     else:
-                        is_config = file == '_blinx_config.py'
-                        print(local_path, config)
-                        if is_config: local_path = generate_config()
+                        is_ident = file.endswith('_ident.py')
+                        print(local_path, ident)
+                        if is_ident: local_path = generate_ident(file)
                         put(local_path, remote_path)
 
         upload_dir('')
 
         if run_file:
-            ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'run', run_file])
+            ampy_run(['--port', port, '--baud', baud, '--delay', delay, 'run', '--no-output', run_file])
 
         print('##################################### done with ' + device_id)
 
@@ -216,14 +218,14 @@ def ampy_run(args):
 
 import threading
 
-def main(port, firmware_dir, device_id, start, config, bulk):
+def main(port, firmware_dir, device_id, start, ident, bulk):
 
     def serial_port_notification(port, connection):
 
         def handle_notification():
             if connection:
                 print('##################################### connected: ' + port)
-                detect_device_and_upload_firmware(port, firmware_dir, device_id, start, config)
+                detect_device_and_upload_firmware(port, firmware_dir, device_id, start, ident)
             else:
                 print('##################################### disconnected: ' + port)
 
@@ -236,7 +238,7 @@ def main(port, firmware_dir, device_id, start, config, bulk):
     if port is None:
         observe_serial_ports_for_changes(serial_port_notification)
     else:
-        detect_device_and_upload_firmware(port, firmware_dir, device_id, start, config)
+        detect_device_and_upload_firmware(port, firmware_dir, device_id, start, ident)
 
 def cli():
 
@@ -247,11 +249,11 @@ def cli():
     parser.add_argument('--dir', default='firmware/default')
     parser.add_argument('--id', default='DEV#')
     parser.add_argument('--start', type=int, default=0)
-    parser.add_argument('--config', default='')
+    parser.add_argument('--ident', default='')
     parser.add_argument('--bulk', action='store_true')
     args = parser.parse_args()
 
-    main(args.port, args.dir, args.id, args.start, args.config, args.bulk)
+    main(args.port, args.dir, args.id, args.start, args.ident, args.bulk)
 
 if __name__ == '__main__':
     cli()

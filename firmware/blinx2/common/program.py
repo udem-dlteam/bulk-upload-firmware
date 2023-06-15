@@ -298,6 +298,16 @@ unixtime_servers = (
     ('worldtimeapi.org', 80, b'/api/timezone/Etc/UTC.txt'),
     )
 
+sensors = {
+    'T'     : (':unix_timestamp', 10, '%10d'),
+    'temp'  : ('', 5, '%5.1f'),
+    'humid' : ('', 5, '%5.1f'),
+    'port1' : ('', 4, '%4.2f'),
+    'port1b': ('', 4, '%4.2f'),
+    'port2' : ('', 4, '%4.2f'),
+    'port2b': ('', 4, '%4.2f'),
+    }
+
 async def settime_from_unixtime_servers():
     i = 0
     while True:
@@ -536,17 +546,13 @@ async def sensor_reader():
         screen_write(3, "T=%5.1f  H=%5.1f" % (temp_from_raw(t)/100, humid_from_raw(h)/100))
         screen.show()
 
-        gc.collect()
-
-csv_header = b'T:unix_timestamp,temp,humid,analog1a,analog1b,analog2a,analog2b\n'
+csv_header = b'T:unix_timestamp,temp,humid,port1,port1b,port2,port2b\n'
 
 async def measurements_as_csv(encapsulation, n):
 
     avail = hi - lo
     if avail < 0: avail += size
     n = min(n, avail)  # number of measurements
-
-    print('measurements_as_csv', n)
 
     await encapsulation.start(b'text/plain', len(csv_header) + n * 43)  # total length in bytes
 
@@ -566,7 +572,6 @@ async def measurements_as_csv(encapsulation, n):
         an1b = measurements[j+ 6] + (measurements[j+ 7] << 8)
         an2a = measurements[j+ 8] + (measurements[j+ 9] << 8)
         an2b = measurements[j+10] + (measurements[j+11] << 8)
-        gc.collect()
         row = bytes("%10d,%5.1f,%5.1f,%4.2f,%4.2f,%4.2f,%4.2f\n" % (measurement_time-i, t/100, h/100, volt_from_raw(an1a), volt_from_raw(an1b), volt_from_raw(an2a), volt_from_raw(an2b)), 'utf-8')
 #        print(row)
         await encapsulation.add(row)

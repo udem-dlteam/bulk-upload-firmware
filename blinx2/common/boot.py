@@ -6,12 +6,9 @@
 
 import os
 
-# the test file exists ?
-files = os.listdir()
-if '_blinx_test.py' in files or '_blinx_test.mpy' in files:
-    import _blinx_test
-else:
-    from _blinx_blinx import button, LEFT, RIGHT
+from _blinx_blinx import button, LEFT, RIGHT
 
-    if not (button(LEFT) or button(RIGHT)):
-        import _blinx_program
+if not (button(LEFT) or button(RIGHT)):
+    import _blinx_program
+else:
+    import _blinx_portal

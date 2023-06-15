@@ -1,7 +1,7 @@
 import _blinx_blinx as blinx
 import _blinx_ssd1306 as ssd1306
-import _blinx_config as _config
-import _blinx_wifi as _wifi
+import _blinx_ident as ident
+import _blinx_config as config
 import uasyncio, os, network, sys, time, machine
 
 error = False
@@ -40,7 +40,7 @@ except Exception as e:
     #exit()
 
 if False and not list_error:
-    for i in ['_blinx_config.py', '_blinx_wifi.py', '_blinx_blinx.mpy', 'boot.py', '_blinx_font8x12.mpy', '_blinx_program.mpy', '_blinx_shtc3.mpy', '_blinx_ssd1306.mpy', '_blinx_analog.mpy', '_blinx_ds1820.mpy', '_blinx_output_sensor.mpy']:
+    for i in ['boot.py', '_blinx_ident.py', '_blinx_config.py', '_blinx_blinx.mpy', '_blinx_screen.mpy', '_blinx_font8x12.mpy', '_blinx_program.mpy', '_blinx_shtc3.mpy', '_blinx_ssd1306.mpy', '_blinx_analog.mpy', '_blinx_ds1820.mpy', '_blinx_output_sensor.mpy', '_blinx_portal.mpy']:
         if i not in l:
             log_error(i + ' not in fs')
             #exit()
@@ -144,7 +144,7 @@ if not shtc3_error:
         except Exception as e:
             log_error('change value shtc3 : ' + repr(e))
         
-        if 10 > float(temp) or float(temp) > 30:
+        if 10 > float(temp) or float(temp) > 40:
             log_error('temp not good value' + temp)
 
         if not screen_error :
@@ -207,12 +207,7 @@ async def settime_from_unixtime_servers():
                         os.remove('_blinx_test.py')
                     except Exception as e:
                         pass
-                    try:
-                        os.remove('_blinx_test.mpy')
-                    except Exception as e:
-                        pass
-                    import machine
-                    machine.reset()
+                    blinx.restart()
 
                 return
 
@@ -236,7 +231,7 @@ async def wlan_start_connect():
     wlan = None
     wl = network.WLAN(network.STA_IF)
     wl.active(True)
-    wl.connect(_wifi.ssid, _wifi.pwd)
+    wl.connect(config.ssid, config.pwd)
     await wlan_connect_loop(wl)
     return
 

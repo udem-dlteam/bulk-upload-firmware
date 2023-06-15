@@ -5,7 +5,7 @@
 scl_pin_num = 18  # I2C SCL pin
 sda_pin_num = 19  # I2C SDA pin
 
-port_pin_nums = [2, 3, 4, 5, sda_pin_num, scl_pin_num]  # 2 signals for each port
+port_pin_nums = [4, 5, 2, 3, sda_pin_num, scl_pin_num]  # 2 signals for each port
 
 def signal_index(port, pin):  # port = 1..3, pin = 1..2
     return port*2 - pin
@@ -23,7 +23,7 @@ buzzer_pin_num = 8
 periph_power_pin_num = 10  # peripheral power
 
 
-from machine import Pin, SoftI2C
+from machine import Pin, SoftI2C, WDT
 
 def input_pin(i):
     return Pin(i, Pin.IN, Pin.PULL_UP)
@@ -39,7 +39,9 @@ def button(i):
 led_pin = output_pin(led_pin_num)
 
 def led(on):
-    led.value(not on)
+    led_pin.value(not on)
+
+led(False)
 
 periph_power_pin = output_pin(periph_power_pin_num)
 
@@ -57,3 +59,8 @@ sda_pin.value(0)
 def i2c_init():
     global i2c
     i2c = SoftI2C(scl_pin, sda_pin)
+
+def restart():
+    WDT(timeout=1000)  # restart in 1 second
+    while True:
+        pass

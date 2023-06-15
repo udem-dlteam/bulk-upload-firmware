@@ -108,12 +108,15 @@ class SHTC3:
 
     @sleeping.setter
     def sleeping(self, sleep_enabled):
-        if sleep_enabled:
-            self._write_command(_SHTC3_SLEEP)
-        else:
-            self._write_command(_SHTC3_WAKEUP)
-        time.sleep(0.001)
-        self._cached_sleep = sleep_enabled
+        try:
+            if sleep_enabled:
+                self._write_command(_SHTC3_SLEEP)
+            else:
+                self._write_command(_SHTC3_WAKEUP)
+            time.sleep(0.001)
+            self._cached_sleep = sleep_enabled
+        except OSError:
+            pass
 
     # lowPowerMode(bool readmode) { _lpMode = readmode
 
@@ -141,19 +144,24 @@ class SHTC3:
         '''both `temperature` and `relative_humidity`, read simultaneously'''
 
         self.sleeping = False
-        temperature = None
-        humidity = None
-        # send correct command for the current power state
-        if self.low_power:
-            self._write_command(_SHTC3_LOWPOW_MEAS_TFIRST)
-            time.sleep(0.001)
-        else:
-            self._write_command(_SHTC3_NORMAL_MEAS_TFIRST)
-            time.sleep(0.013)
 
-        # self._buffer = bytearray(6)
-        # read the measured data into our buffer
-        i2c.readfrom_into(self._addr, self._buffer)
+        try:
+
+            # send correct command for the current power state
+            if self.low_power:
+                self._write_command(_SHTC3_LOWPOW_MEAS_TFIRST)
+                time.sleep(0.001)
+            else:
+                self._write_command(_SHTC3_NORMAL_MEAS_TFIRST)
+                time.sleep(0.013)
+
+            # self._buffer = bytearray(6)
+            # read the measured data into our buffer
+
+            i2c.readfrom_into(self._addr, self._buffer)
+
+        except OSError:
+            return (0, 0)
 
         # separate the read data
         temp_data = self._buffer[0:2]
@@ -163,22 +171,18 @@ class SHTC3:
 
         # check CRC of bytes
         if temp_crc != self._crc8(temp_data) or humidity_crc != self._crc8(humidity_data):
-            return (temperature, humidity)
+            return (0, 0)
 
         # decode data into human values:
         # convert bytes into 16-bit signed integer
         # convert the LSB value to a human value according to the datasheet
         raw_temp = unpack_from('>H', temp_data)[0]
-#        raw_temp = ((4375 * raw_temp) >> 14) - 4500
-#        temperature = raw_temp / 100.0
 
         # repeat above steps for humidity data
         raw_humidity = unpack_from('>H', humidity_data)[0]
-#        raw_humidity = (625 * raw_humidity) >> 12
-#        humidity = raw_humidity / 100.0
 
         self.sleeping = True
-#        return (temperature, humidity)
+
         return (raw_temp, raw_humidity)
 
     ## CRC-8 formula from page 14 of SHTC3 datasheet

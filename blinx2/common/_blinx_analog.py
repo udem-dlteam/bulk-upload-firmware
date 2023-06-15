@@ -15,9 +15,6 @@ adc_value = [None, None, None, None]
 def volt_from_raw(n, times_sensors):
     return '%4.2f' % ((n+397)/23030)
 
-def other(*args,**kargs):
-    return
-
 # get information
 def get_sensor_analog_ds1820(n,m):
     global adc_value

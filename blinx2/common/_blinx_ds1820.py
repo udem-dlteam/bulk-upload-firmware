@@ -15,7 +15,7 @@ def byte_to_int_ds1820(n, times_sensors):
     return '%5.1f' % (n / 100)
 
 def other(*args,**kargs):
-    return
+    return 0
 
 # test if a ds1820 sensor is connected
 def get_sensor_analog_ds1820(n,m):
@@ -45,7 +45,7 @@ info = {}
 
 # first scan for the ds sensor
 def scan_ds1820():
-    global first_scan
+    global ds1820_probable
     a = machine.Pin(2, machine.Pin.IN)
     b = machine.ADC(a, atten=machine.ADC.ATTN_11DB)
     pull = [None, machine.Pin.PULL_UP]
@@ -61,6 +61,7 @@ def scan_ds1820():
             v = v // 64
             if v < limits[j][0] or v > limits[j][1]:
                 autodetect = False
+        autodetect = True
         ds1820_probable[i-2] = autodetect
     print(ds1820_probable)
 

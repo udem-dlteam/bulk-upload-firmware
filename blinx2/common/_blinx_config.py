@@ -1,3 +1,2 @@
-id = ''
-mac = ''
-chip = ''
+ssid = 'BLINXNET'
+pwd = 'blinxnet'

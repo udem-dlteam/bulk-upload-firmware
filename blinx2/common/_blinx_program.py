@@ -1,26 +1,103 @@
-safe_fs = True # bool for the activation of the write and remove ops
+safe_fs = False # bool for the activation of the write and remove ops
 
 def safe_to_modify(filename):
     return not (filename[:7] == '_blinx_' or filename == 'boot.py')
 
-import _blinx_blinx as blinx
-
 #------------------------------------------------------------------------------
 
-# turn on peripherals
+# turn on peripherals and initialize i2c
+
+import _blinx_blinx as blinx
 
 blinx.periph_power(1)
 blinx.i2c_init()
 
 #------------------------------------------------------------------------------
 
+# initialize display and show splash screen
+
+import time
+import _blinx_ident as ident
+import _blinx_version as version
+import _blinx_config as config
+import _blinx_screen as screen
+
+wlan = None
+
+def pad_text(text, width=16):
+    text = text[:width]
+    return text + ' '*(width-len(text))
+
+def show_name(line=0, fg=0):
+    name = 'name:' + ident.id
+    screen.screen_write(line, pad_text(name), 0, fg)
+
+def show_wifi(line=0):
+    if wlan:
+        ssid = wlan.config('essid')
+    else:
+        ssid = config.ssid
+    ssid = 'wifi:' + ssid
+    screen.screen_write(line, pad_text(ssid), 0, 0)
+
+time.sleep_ms(10)
+
+screen.screen_init()
+
+def show_connecting(instructions):
+    show_name(0, 1)
+    screen.screen_write(1, pad_text('version:'+version.version), 0, 1)
+    if instructions:
+        screen.screen_write(2, 'for help scan QR ', 0, 0)
+        screen.screen_write(3, 'code with phone  ', 0, 0)
+    else:
+        screen.screen_write(2, 'connecting to   ', 0, 0)
+        show_wifi(3)
+
+display_cycle_count = 0
+display_instructions_count = 0
+
+def update_display(data = []):
+
+    global display_cycle_count, display_instructions_count
+
+    screen.screen_erase()
+
+    if not wlan:
+
+        show_connecting(display_instructions_count >= 4)
+        display_instructions_count = (display_instructions_count+1) % 7
+
+    else:
+
+        display_instructions_count = 0
+
+        if display_cycle_count <= 4:
+            show_name()
+        else:
+            show_wifi()
+
+        y = 1
+        for index in data:
+            z = 0
+            for el in index:
+                screen.screen_write(y, el, z)
+                z += 64
+            y += 1
+
+        display_cycle_count = (display_cycle_count+1) % 7
+
+    screen.screen_show()
+
+update_display()
+
+#------------------------------------------------------------------------------
+
 # import all
 
-import _blinx_config as _config
-import _blinx_wifi as _wifi
-import _blinx_version as _version
+import machine, utime
 
-import ubinascii, os, sys, time
+import ubinascii, os, sys
 from struct import pack
 from binascii import crc32
 
@@ -30,30 +107,25 @@ import network
 import ntptime
 import gc
 
-import _blinx_output_sensor as output_sensor_file
+import _blinx_output_sensor as output_sensor_module
 import _blinx_shtc3 as shtc3
 import _blinx_analog as analog
 import _blinx_ds1820 as ds1820
 
-import _blinx_ssd1306 as ssd1306
-import _blinx_font8x12 as font
-
 #------------------------------------------------------------------------------
+# history of sensor readings
 
-
-
-
-#------------------------------------------------------------------------------
-# information the delta, for the data
 general_size = 180
+
 size_data_sensors = [
-    general_size+1, # 1  seconds
+    general_size+1, # 1  second
     general_size+1, # 10 seconds
-    general_size+1, # 1  minutes
+    general_size+1, # 1  minute
     general_size+1, # 10 minutes
-    general_size+1, # 1  hours
+    general_size+1, # 1  hour
     general_size+1  # 1  day
 ]
+
 offset_data = [
     0,
     0,
@@ -62,6 +134,7 @@ offset_data = [
     3,
     4
 ]
+
 offset_to_seconds = [
     1,
     10,
@@ -70,8 +143,6 @@ offset_to_seconds = [
     3600,
     3600*24
 ]
-#------------------------------------------------------------------------------
-
 
 #------------------------------------------------------------------------------
 # time
@@ -79,107 +150,10 @@ offset_to_seconds = [
 def get_time():
     return time.time()
 
-
-#------------------------------------------------------------------------------
-# screen output
-wlan = None
-
-def screen_init():
-    global screen
-    screen = ssd1306.SSD1306_I2C(128, 32, blinx.i2c)
-
-def screen_write(line, text, start_x, fg=1):
-    screen.fill_rect(start_x, line*8, 128, 8, 1-fg)
-    screen.text(text, start_x, line*8, fg)
-
-time.sleep_ms(10)
-
-screen_init()
-
-
-def write(text, w, h, start_x, start_y):
-    start_x *= font.width
-    start_y *= font.height
-    for i in range(len(text)):
-        bitmap = font.bitmap[ord(text[i])]
-        posx = (i+1) * font.width
-        if posx * w > 128: break
-        for yy in range(font.height):
-            y = yy * h
-            if y >= 32: break
-            hh = h
-            if yy == font.height-1: hh -= 1
-            b = ~bitmap[yy]
-            for xx in range(font.width):
-                x = (posx - xx - 1) * w
-                col = b & 1
-                screen.rect(start_x+x, start_y+y, start_x+w, start_y+hh, col)
-                b >>= 1
-    screen.show()
-
-def screen_erase():
-    screen.fill(0)
-
-screen_cycle_count = 0
-screen_instructions_count = 0
-
-def write_config_id(data = []):
-    global screen_cycle_count, screen_instructions_count
-
-    screen_erase()
-
-    def show_name():
-        name = 'name:' + _config.id
-        name += ' '*(16-len(name))
-        screen_write(0, name[:16], 0, 0)
-
-    def show_wifi():
-        if wlan:
-            wifi = wlan.config('essid')
-        else:
-            wifi = _wifi.ssid
-        wifi = 'wifi:' + wifi
-        wifi += ' '*(16-len(wifi))
-        screen_write(0, wifi[:16], 0, 0)
-
-    if not wlan:
-        if screen_cycle_count <= 1:
-            show_name()
-            if screen_instructions_count < 4:
-                screen_instructions_count += 1
-        elif screen_cycle_count <= 3:
-            show_wifi()
-        else:
-            screen_write(0, 'PLEASE WAIT... ', 0, 0)
-        if screen_instructions_count >= 4:
-            screen_write(1, '> scan the QR  <', 0, 0)
-            screen_write(2, '> code to view <', 0, 0)
-            screen_write(3, '> instructions <', 0, 0)
-    else:
-
-        if screen_cycle_count <= 1:
-            show_name()
-        else:
-            show_wifi()
-
-        y = 1
-        for index in data:
-            z = 0
-            for el in index:
-                screen_write(y, el, z)
-                z += 64
-            y += 1
-
-    screen_cycle_count = (screen_cycle_count+1) % 6
-
-    screen.show()
-
-write_config_id()
-
 #------------------------------------------------------------------------------
 # start networking
 
-network.hostname(_config.id)  # assign the mDNS name <device_id>.local
+network.hostname(ident.id)  # assign the mDNS name <device_id>.local
 
 wlan_connected = uasyncio.ThreadSafeFlag()  # flag indicating wlan connection
 
@@ -190,7 +164,7 @@ def wlan_start_connect():
     wlan = None
     wl = network.WLAN(network.STA_IF)
     wl.active(True)
-    wl.connect(_wifi.ssid, _wifi.pwd)
+    wl.connect(config.ssid, config.pwd)
     uasyncio.create_task(wlan_connect_loop(wl))
 
 async def wlan_connect_loop(wl):
@@ -386,9 +360,9 @@ async def web_server():
                 input_more_sensors = []
                 all_csv = b''
                 default_input_index_sensors = []
-                output_sensor_file.value_output = [[],[],[],[]]
-                write_config_id()  # show device id on screen
-                screen.show()
+                output_sensor_module.value_output = [[],[],[],[]]
+                update_display()  # show device id on screen
+                screen.screen_show()
                 if error:
                     wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
@@ -404,6 +378,15 @@ async def web_server():
                     print('seqnum')
                     q += 7
                     q = doc.find(b'&', q) + 1
+                    if q == 0:
+                        q = l
+                
+                if doc[q:q+5] == b'time=':
+                    print('time')
+                    q += 5
+                    start = q
+                    q = doc.find(b'&', q) + 1
+                    settime(int(str(doc[start:q], 'utf-8')))
                     if q == 0:
                         q = l
                 
@@ -442,7 +425,7 @@ async def web_server():
                         if q < l:
                             q += 1
                     try :
-                        if safe_to_modify(name): # verify if we can remove it
+                        if not safe_to_modify(name): # verify if we can remove it
                             wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                         else:
                             f = open(name, format)
@@ -471,7 +454,7 @@ async def web_server():
                     pos = 0
                     if doc[q:q+4] == b'pos=': # where we are in the reading of the file
                         print('pos')
-                        q += 6
+                        q += 4
                         start = q
                         q = doc.find(b'&', q)
                         if q < 0:
@@ -481,7 +464,7 @@ async def web_server():
                             q += 1
                     
                     try :
-                        if safe_to_modify(name): # verify if we can remove it
+                        if not safe_to_modify(name): # verify if we can remove it
                             wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                         else:
                             f = open(name, 'rb+')
@@ -516,7 +499,7 @@ async def web_server():
                         q += 1
                     
                     try:
-                        if safe_to_modify(name): # verify if we can remove it
+                        if not safe_to_modify(name): # verify if we can remove it
                             wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                         else:
                             os.remove(name)
@@ -531,7 +514,7 @@ async def web_server():
                 elif doc[q:q+3] == b'ls=': # get the list of the files
                     print('ls')
                     codeBoot = False
-                    q += 6
+                    q += 3
                     start = q
                     q = doc.find(b'&', q)
                     if q < 0:
@@ -562,7 +545,7 @@ async def web_server():
                     if q == 0:
                         q = l
 
-                    v = _version.version # TODO
+                    v = bytes(version.version, 'utf-8')
                     
                     await encapsulation.start(b'text/plain', len(v))  # total length in bytes
                     await encapsulation.add(v)
@@ -586,7 +569,7 @@ async def web_server():
                     blinx.periph_power(0)
                     print('config')
                     codeBoot = False
-                    q += 13
+                    q += 7
                     start = q
                     q = doc.find(b'&', q)
                     if q < 0:
@@ -694,51 +677,45 @@ async def web_server():
                                 await encapsulation.start(b'text/plain', 0)  # total length in bytes
                                 await encapsulation.add(b'')
                                 await encapsulation.end()
-                elif doc[q:q+8] == b'content=' or doc[q:q+7] == b'output=': # change a output sensor
+                elif doc[q:q+8] == b'content=': # change a output sensor
                     # if it is `content` then we have a text in base64, if it is `output` we have a text in utf8
-                    print('output-content')
+                    print('content')
                     codeBoot = False
-                    output_or_content = False
-                    if doc[q:q+8] == b'content=':
-                        q += 8
-                        output_or_content = True
-                    else:
-                        q += 7
+                    q += 8
                     start = q
                     q = doc.find(b'&', q)
                     if q < 0:
                         q = l
                     
-                    if output_or_content:
-                        output_sensors = str(ubinascii.a2b_base64(doc[start:q]), 'utf-8')
-                    else:
-                        output_sensors = str(doc[start:q], 'utf-8')
-                        
+                    output_sensors = str(ubinascii.a2b_base64(doc[start:q]), 'utf-8')
+
                     if q < l:
                         q += 1
-                    
-                    try:
-                        t = output_sensors.split(',')
-                        for i in t:
-                            tt = i.split('=')
-                            name = tt[0]
-                            if len(tt) > 1:
-                                args = tt[1].split('/')
-                            else :
-                                args = []
-                            if not (name.lower() in output_sensor_file.dict_sensors_output):
-                                wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                                break
-                            else :
-                                output_sensor_file.dict_sensors_output[name](args)
+
+                    pos = 0
+                    while pos < len(output_sensors):
+                        start = pos
+                        pos = output_sensors.find('=', pos)
+                        if pos < 0:
+                            break
+                        name = output_sensors[start:pos]
+                        start = pos+1
+                        if name == 'screen':
+                            pos = len(output_sensors)
+                            line = output_sensors[start:pos]
+                            output_sensor_module.dict_sensors_output[name]([line])
                         else:
-                            #await measurements_as_csv(encapsulation, '', 9999999, '1s')
-                            await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                            await encapsulation.add(b'')
-                            await encapsulation.end()
-                    except Exception as e:
-                        print('output : error', e)
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                            pos = output_sensors.find('\n', pos)
+                            if pos < 0:
+                                pos = len(output_sensors)
+                            line = output_sensors[start:pos]
+                            pos += 1
+                            if name in output_sensor_module.dict_sensors_output:
+                                output_sensor_module.dict_sensors_output[name](line.split('/'))
+
+                    await encapsulation.start(b'text/plain', 0)  # total length in bytes
+                    await encapsulation.add(b'')
+                    await encapsulation.end()
 
             if codeBoot : # if it is nothing above, we go to codeboot.org
                 print('codeBoot')
@@ -781,7 +758,12 @@ async def web_server():
 
         ar = AsyncReader(rstream)
 
-        if not await ar.expect(b'GET '):
+        first = await ar.read_byte()
+
+        is_get  = first == 71 and await ar.expect(b'ET ')    # GET
+        is_post = first == 80 and await ar.expect(b'POST ')  # POST
+
+        if not (is_get or is_post):
             wstream.write(b'HTTP/1.1 405 Method Not Allowed\r\n')
         else:
             doc = await ar.read_group(0x20)  # group must be followed by a space
@@ -848,7 +830,7 @@ unixtime_servers = (
 
 async def settime_from_unixtime_servers():
     i = 0
-    while True:
+    while not time_set:
         unixtime_server = unixtime_servers[i]
         i = (i+1) % len(unixtime_servers)
         host = unixtime_server[0]
@@ -876,17 +858,19 @@ async def settime_from_unixtime_servers():
             unixtime = await ar.read_header_attribute(b'unixtime:')
             wstream.close()
             if unixtime > 0:
-                print('unixtime =', unixtime)
                 settime(unixtime)
                 return
             await uasyncio.sleep_ms(4000)
 
-def settime(t):
+time_set = False
 
-    import machine, utime
-
-    tm = utime.gmtime(t)
-    machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+def settime(unixtime):
+    global time_set
+    print('unixtime =', unixtime)
+    if not time_set:
+        time_set = True
+        tm = utime.gmtime(unixtime)
+        machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
 
 def sync_ntptime():
     ntp_servers = ('pool.ntp.org', '142.112.54.28', '216.6.2.70', '206.108.0.131', '206.108.0.132')
@@ -1122,7 +1106,7 @@ def modify_port_input(port, name, save_output_sensors_csv, get_save_output_senso
         elif port == 3:
             input_functions_sensors.append(get_save_output_sensors(3))
 
-output_sensor_file.modify_port_input = modify_port_input
+output_sensor_module.modify_port_input = modify_port_input
 
 # list of info for the sensor
 input_index_sensors = [
@@ -1251,6 +1235,8 @@ async def sensor_reader():
                 done_one[0] = -1
             else:
                 done_one[0] += 1
+        elif done_one[0] == 0:
+            done_one[0] += 1
 
         timeInterval = int(time.ticks_ms() / 1000)
         
@@ -1270,8 +1256,7 @@ async def sensor_reader():
                 input_more_sensors[i][0].convert_temp()
         start_ds1820 = time.ticks_ms()
         
-        output_sensor_file.remove_output_value()
-
+        output_sensor_module.remove_output_value()
 
         measurement_time = get_time()
         data = [0] * nsensors_input_use
@@ -1285,10 +1270,10 @@ async def sensor_reader():
         for i in range(nsensors_input_use):
             data[i] = data[i] // nsamples
 
-        hi[0] += 1
-        if hi[0] == size_data_sensors[0]: hi[0] = 0
-        j = hi[0] * bytes_per_measurement
-        
+        next_hi = hi[0] + 1
+        if next_hi == size_data_sensors[0]: next_hi = 0
+        j = next_hi * bytes_per_measurement
+
         for i in range(nsensors_input_use):
             measurements[0][j + 2*i] = data[i] & 0xff; measurements[0][j + 2*i + 1] = data[i] >> 8
 
@@ -1301,7 +1286,9 @@ async def sensor_reader():
                     v = input_functions_sensors[y]()
                     measurements[0][j + 2*y] = v & 0xff; measurements[0][j + 2*y + 1] = v >> 8
 
-        if lo[0] == hi[0]:
+        hi[0] = next_hi
+
+        if lo[0] == next_hi:
             lo[0] += 1
             if lo[0] == size_data_sensors[0]: lo[0] = 0
 
@@ -1309,7 +1296,7 @@ async def sensor_reader():
             moyenneData(toDo_interval)
 
         # can we show data on the screen ?
-        if not output_sensor_file.screen_modify:
+        if not output_sensor_module.screen_modify:
             tempL = len(affichage_sensors_list)
             if tempL != 0:
                 data = []
@@ -1321,10 +1308,10 @@ async def sensor_reader():
                     if i%2 == 0:
                         data.append([])
                     data[-1].append(tt)
-                write_config_id(data)
+                update_display(data)
 
-        #screen_write(3, 'T=%5.1f  H=%5.1f' % (temp_from_raw(t)/100, humid_from_raw(h)/100))
-        #screen.show()
+        #screen.screen_write(3, 'T=%5.1f  H=%5.1f' % (temp_from_raw(t)/100, humid_from_raw(h)/100))
+        #screen.screen_show()
 
         #gc.collect()
 
@@ -1403,9 +1390,6 @@ all_csv += b'\n'
 default_input_index_sensors = list(range(nsensors_input_use))
 
 async def measurements_as_csv(encapsulation, name, n, times_sensors):
-    if not output_sensor_file.screen_modify:
-        write_config_id()
-
     def get_time_sensors(modulo):
         t = measurement_time
         while t%modulo != 0:
@@ -1432,7 +1416,7 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
     input_index_sensors_look = []
     size_lign_csv = 1 + 10 # for the '\n' and the time
     csv_header_modify = csv_header
-    if name == '' or name == 'foo':
+    if name == '':
         input_index_sensors_look = default_input_index_sensors
         csv_header_modify += all_csv 
         size_lign_csv += input_size_sensors_csv[-1] + nsensors_input_use
@@ -1443,7 +1427,7 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
             if i in input_index_sensors:
                 temp = input_index_sensors.index(i)
                 input_index_sensors_look.append(temp)
-                csv_header_modify += ':' + bytes(type_char_sensors[temp], 'utf-8')
+                csv_header_modify += b':' + bytes(type_char_sensors[temp], 'utf-8')
                 size_lign_csv += input_size_sensors_csv[temp] + 1
             else :
                 input_index_sensors_look.append(-1)
@@ -1493,6 +1477,9 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
         await encapsulation.add(row)
 
     await encapsulation.end()
+
+    #if not output_sensor_module.screen_modify:
+    #    update_display()
 
 
 #------------------------------------------------------------------------------
