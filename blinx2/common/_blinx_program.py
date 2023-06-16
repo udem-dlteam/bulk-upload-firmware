@@ -1068,7 +1068,7 @@ def modify_port_input(port, name, save_output_sensors_csv, get_save_output_senso
         indexSensors = input_pin_sensors.index(port)
         # is it a input sensors, if yes we modify the type
         if input_type_sensors[indexSensors] == 'in':
-            input_index_sensors[indexSensors] = 'output-' + name
+            input_index_sensors[indexSensors] = 'output' + str(port+1)
             input_short_name_sensors[indexSensors] = 'o' + str(port+1)
             input_functions_sensors_csv[indexSensors] = save_output_sensors_csv
             input_size_sensors_csv[indexSensors] = 4

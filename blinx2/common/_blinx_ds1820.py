@@ -48,8 +48,8 @@ def scan_ds1820():
     global ds1820_probable
     a = machine.Pin(2, machine.Pin.IN)
     b = machine.ADC(a, atten=machine.ADC.ATTN_11DB)
-    pull = [None, machine.Pin.PULL_UP]
-    limits = [[500,1520], [2000,2340]]
+    pull = [machine.Pin.PULL_UP, None]
+    limits = [[2000,2340], [500,1520]]
     for i in range(2,6):
         autodetect = True
         for j in range(len(limits)):
