@@ -5,7 +5,7 @@
 # This module is used to automatically install firmware when devices are
 # connected to the computer's USB ports.
 
-import sys, os, re, time, argparse
+import sys, os, re, time, argparse, subprocess
 import esptool
 
 # Detect newly connected serial ports of interest
@@ -50,6 +50,10 @@ def device_id_from_port(port, template, start):
                         return generate_id(template, start)
                     else:
                         return name + g[1]
+            else:
+                p = subprocess.run(["udevadm", "info", "-a", "-n", port], check=True, capture_output=True)
+                name = subprocess.run(['grep', '-Eo', 'BLINX[0-9][0-9][0-9]'], input=p.stdout, capture_output=True)
+                return name.stdout.decode('ascii').split()[0]
     return None
 
 # Detect newly connected serial ports of interest
