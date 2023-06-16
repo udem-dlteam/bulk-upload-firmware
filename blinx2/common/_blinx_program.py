@@ -396,7 +396,7 @@ async def web_server():
                     q += 5
                     start = q
                     q = doc.find(b'&', q) + 1
-                    settime(int(str(doc[start:q], 'utf-8')))
+                    settime(int(str(doc[start:q], 'utf-8')), True)
                     if q == 0:
                         q = l
                 
@@ -878,10 +878,10 @@ async def settime_from_unixtime_servers():
 
 time_set = False
 
-def settime(unixtime):
+def settime(unixtime, force=False):
     global time_set
 #    print('unixtime =', unixtime)
-    if not time_set:
+    if force or not time_set:
         time_set = True
         tm = utime.gmtime(unixtime)
         machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))

@@ -27,17 +27,17 @@ periph_power_pin_num = 10  # peripheral power
 from machine import Pin, SoftI2C, WDT
 
 def input_pin(i):
-    return Pin(i, Pin.IN, Pin.PULL_UP)
+    return Pin(i, Pin.IN, None)
 
-def output_pin(i):
-    return Pin(i, Pin.OUT, Pin.PULL_UP)
+def output_pin(i, pull=Pin.PULL_DOWN):
+    return Pin(i, Pin.OUT, pull)
 
 button_pins = [input_pin(button_pin_nums[0]), input_pin(button_pin_nums[1])]
 
 def button(i):
     return button_pins[i].value() == 0
 
-led_pin = output_pin(led_pin_num)
+led_pin = output_pin(led_pin_num, Pin.PULL_UP)
 
 def led(on):
     led_pin.value(not on)
@@ -51,8 +51,8 @@ def periph_power(on):
 
 periph_power(0)
 
-scl_pin = output_pin(scl_pin_num)
-sda_pin = output_pin(sda_pin_num)
+scl_pin = output_pin(scl_pin_num, Pin.PULL_UP)
+sda_pin = output_pin(sda_pin_num, Pin.PULL_UP)
 
 scl_pin.value(0)
 sda_pin.value(0)

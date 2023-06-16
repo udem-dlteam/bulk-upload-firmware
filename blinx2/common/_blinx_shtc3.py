@@ -230,7 +230,7 @@ info = {
         'function_csv' : humid_from_raw,
         'size_csv' : 5,
         'type' : 'in',
-        'char' : '',
+        'char' : '0..100',
         'more' : []
         }
 }
