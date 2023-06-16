@@ -92,8 +92,8 @@ def wifi_selection_html(wifi_networks):
         html += name
         html += '</option>'
         html += '\n'
-    html = '<select>\n<option value="" disabled hidden' + selected +\
-           '>-- Select wifi to connect to --</option><option value="" disabled hidden>[number of full bars = signal strength]</option>\n' + html + '<option value="">Scan for nearby wifi networks again</option>\n</select>\n'
+    html = '<select name="ssid">\n<option value="" disabled hidden' + selected +\
+           '>-- Select wifi to connect to --</option><option value="" disabled hidden>[number of full bars = signal strength]</option>\n' + html + '\n</select>\n'
     return html
 
 ###############################################################################
@@ -137,12 +137,12 @@ def wifi_start_access_point():
     wifi.active(True)
     wifi.ifconfig((SERVER_IP, SERVER_SUBNET, SERVER_IP, SERVER_IP))
     wifi.config(essid=SERVER_SSID, authmode=network.AUTH_OPEN)
-    print('Network config:', wifi.ifconfig())
+    # print('Network config:', wifi.ifconfig())
 
 
 def _handle_exception(loop, context):
     """ uasyncio v3 only: global exception handler """
-    print('Global exception handler')
+    # print('Global exception handler')
     sys.print_exception(context["exception"])
     sys.exit()
 
@@ -159,10 +159,10 @@ class DNSQuery:
                 self.domain += data[ini + 1:ini + lon + 1].decode('utf-8') + '.'
                 ini += lon + 1
                 lon = data[ini]
-        print("DNSQuery domain:" + self.domain)
+        # print("DNSQuery domain:" + self.domain)
 
     def response(self, ip):
-        print("DNSQuery response: {} ==> {}".format(self.domain, ip))
+        # print("DNSQuery response: {} ==> {}".format(self.domain, ip))
         if self.domain:
             packet = self.data[:2] + b'\x81\x80'
             packet += self.data[4:6] + self.data[4:6] + b'\x00\x00\x00\x00'  # Questions and Answers Counts
@@ -200,6 +200,7 @@ class AsyncReader:
                     self.remaining_bytes = 0
                     return -1  # EOF
             self.remaining_bytes -= 1
+            # print("== " + str(byte) + " " + chr(byte))
             return byte
 
     async def expect(self, seq):
@@ -209,16 +210,30 @@ class AsyncReader:
                 return False
         return True
 
-    async def read_group(self, ender):
+    async def read_group(self):
+        """Reads until SPC or CRLF up to 100 bytes."""
         result = b''
-        while len(result) < 100:
+        i = 0
+        while i < 100:
             byte = await self.read_byte()
-            if byte <= 0x20: break
+            # SPC delimits groups
+            if byte == 32:
+                break
+            # CRLF?
+            if byte == 13:
+                byte = await self.read_byte()
+                if byte == 10:
+                    break
             result += chr(byte)
-        if byte == ender:
-            return result
-        else:
-            return b''
+            i += 1
+        return result
+
+    async def parse_form(self, content):
+        kvs = dict()
+        for kv in content.split(b'&'):
+            k, v = kv.split(b'=')
+            kvs[url_decode(k.decode('ascii'))] = url_decode(v.decode('ascii'))
+        return kvs
 
     async def read_header_attribute(self, attribute):
         attribute_value = -1
@@ -267,6 +282,26 @@ class AsyncReader:
             content += chr(byte)
         return content
 
+def url_decode(encoded_str):
+    hex_chars = "0123456789ABCDEFabcdef"
+    decoded_str = ""
+    i = 0
+    while i < len(encoded_str):
+        if encoded_str[i] == '%':
+            if i + 2 < len(encoded_str) and encoded_str[i+1] in hex_chars and encoded_str[i+2] in hex_chars:
+                decoded_str += chr(int(encoded_str[i+1:i+3], 16))
+                i += 3
+            else:
+                raise ValueError("Invalid encoded string")
+        elif encoded_str[i] == '+':
+            decoded_str += ' '
+            i += 1
+        else:
+            decoded_str += encoded_str[i]
+            i += 1
+
+    return decoded_str
+
 class ConfigurationPortal:
     async def start(self):
         # Get the event loop
@@ -287,41 +322,56 @@ class ConfigurationPortal:
         loop.create_task(self.run_dns_server())
 
         # Start looping forever
-        print('Looping forever...')
+        # print('Looping forever...')
         loop.run_forever()
 
     async def handle_http_connection(self, rstream, wstream):
-        gc.collect()
+        # gc.collect()
 
         ar = AsyncReader(rstream)
 
         first = await ar.read_byte()
 
+        # Parse the request line
+        # Request-Line   = Method SP Request-URI SP HTTP-Version CRLF
         is_get  = first == 71 and await ar.expect(b'ET ')   # GET
         is_post = first == 80 and await ar.expect(b'OST ')  # POST
+
+        updated_wifi = False
 
         if not (is_get or is_post):
             wstream.write(b'HTTP/1.1 405 Method Not Allowed\r\n')
         else:
-            doc = await ar.read_group(0x20)  # group must be followed by a space
-            protocol = await ar.read_group(0x0a)
-            print(repr(doc))
-            print(repr(protocol))
-            if not doc:
+            uri = await ar.read_group()
+            protocol = await ar.read_group()
+
+            if not uri:
                 wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
             else:
-
                 # important to avoid 'connection reset' errors
                 content_length = await ar.read_header_attribute(b'content-length:')
                 ar.remaining_bytes = content_length
                 content = await ar.read_to_eof()
-                print('doc =', doc, is_get, is_post)
-                print('content =', content)
-                print('peername =', wstream.get_extra_info('peername'))
+                # print(("POST " if is_post else " GET ") + uri.decode('ascii') + " " + protocol.decode('ascii'))
+                # print('Content-Length: ', content_length)
+                # print('\n', content)
+                # print('peername =', wstream.get_extra_info('peername'))
 
-                if doc == b'/config':
-                    response = 'HTTP/1.1 200 OK\r\n\r\nCONFIG!\r\n'
-                    print('CONFIG!')
+                # Update the WiFi settings on disk
+                if uri[0:7] == b'/config' and is_get:
+                    kvs = await ar.parse_form(uri[8:])
+                    if 'ssid' not in kvs or 'pwd' not in kvs:
+                        response = 'HTTP/1.1 400 Bad Request\r\n'
+                    else:
+                        try:
+                            f = open('_blinx_config.py', 'w')
+                            f.write("ssid = " + repr(kvs['ssid']) + "\n")
+                            f.write("pwd = " + repr(kvs['pwd']) + "\n")
+                            f.close()
+                            updated_wifi = True
+                        except Exception as e:
+                            response = 'HTTP/1.1 500 Internal Server Error\r\n'
+                        response = PORTAL_SUCCESS
                 else:
                     response = 'HTTP/1.1 200 OK\r\n\r\n' + portal_html()
                 await wstream.awrite(response)
@@ -330,7 +380,11 @@ class ConfigurationPortal:
 
         # Close the socket
         await wstream.aclose()
-        # print("client socket closed")
+
+        # Reboot if necessary
+        if updated_wifi:
+            from _blinx_blinx import restart
+            restart()
 
     async def run_dns_server(self):
         """ function to handle incoming dns requests """
@@ -346,18 +400,20 @@ class ConfigurationPortal:
                 else:
                     yield asyncio.IORead(udps)
                 data, addr = udps.recvfrom(4096)
-                print("Incoming DNS request...")
+                # print("Incoming DNS request...")
 
                 DNS = DNSQuery(data)
                 udps.sendto(DNS.response(SERVER_IP), addr)
 
-                print("Replying: {:s} -> {:s}".format(DNS.domain, SERVER_IP))
+                # print("Replying: {:s} -> {:s}".format(DNS.domain, SERVER_IP))
 
             except Exception as e:
-                print("DNS server error:", e)
+                # print("DNS server error:", e)
                 await asyncio.sleep_ms(3000)
 
         udps.close()
+
+PORTAL_SUCCESS = "HTTP/1.1 200 OK\r\n\r\n<!doctype html><html><h1>" + ident.id + " is rebooting!</h1></html>"
 
 def portal_html():
     return """
@@ -427,6 +483,7 @@ button {
     -webkit-appearance: none;
     border-radius: 1vh;
     border-color: transparent;
+    color: black;
 }
 
 input,
@@ -462,13 +519,13 @@ option {
     <b>""" + ident.id + """ configuration</b>
   </header>
   <div class="content">
-    <center>Wifi network """ + ident.id + """ will connect to:</center>
-    <form action="/config" action="#" method="POST" target="_blank">
+    <center>Wifi network """ + ident.id + """<br>will connect to:</center>
+    <form action="/config" method="GET" target="_blank">
       <center>""" + wifi_selection_html(scan_wifi_networks()) + """</center>
       <br>
       <center>Password:</center>
       <center><input type="text" name="pwd"></center>
-      <br><br>
+      <br>
       <center><input type="submit" value="Apply"></center>
     </form>
   </div>
