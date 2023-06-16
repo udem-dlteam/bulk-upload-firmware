@@ -8,7 +8,16 @@ import os
 
 from _blinx_blinx import button, LEFT, RIGHT
 
-if not (button(LEFT) or button(RIGHT)):
-    import _blinx_program
-else:
+if button(LEFT) or button(RIGHT):
     import _blinx_portal
+else:
+    boot = '_blinx_boot.py'
+    try:
+        f = open(boot, 'r')
+        code = f.read()
+        f.close()
+        os.remove(boot)
+        exec(code)
+    except Exception:
+        pass
+    import _blinx_program

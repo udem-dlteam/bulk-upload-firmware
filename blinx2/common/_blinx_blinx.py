@@ -5,6 +5,7 @@
 scl_pin_num = 18  # I2C SCL pin
 sda_pin_num = 19  # I2C SDA pin
 
+#port_pin_nums = [4, 2, 5, 3, sda_pin_num, scl_pin_num]  # 2 signals for each port
 port_pin_nums = [4, 5, 2, 3, sda_pin_num, scl_pin_num]  # 2 signals for each port
 
 def signal_index(port, pin):  # port = 1..3, pin = 1..2

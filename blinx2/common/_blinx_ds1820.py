@@ -20,7 +20,7 @@ def other(*args,**kargs):
 # test if a ds1820 sensor is connected
 def get_sensor_analog_ds1820(n,m):
     global ds1820_sensor, ds1820_rom, ds1820_onewire
-    index = n*2 + m - 3
+    index = m*2 + n - 3
     t1 = blinx.port_pin_num(n,m)
 
     if ds1820_probable[index]:
@@ -63,7 +63,7 @@ def scan_ds1820():
                 autodetect = False
         autodetect = True
         ds1820_probable[i-2] = autodetect
-    print(ds1820_probable)
+#    print(ds1820_probable)
 
 # get info on the sensor
 def get_info():

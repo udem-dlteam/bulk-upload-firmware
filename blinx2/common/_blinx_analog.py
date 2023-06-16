@@ -18,7 +18,7 @@ def volt_from_raw(n, times_sensors):
 # get information
 def get_sensor_analog_ds1820(n,m):
     global adc_value
-    index = n*2 + m - 3
+    index = m*2 + n - 3
     t = blinx.port_pin_num(n,m)
     t = blinx.input_pin(t)
     adc_value[index] = ADC(t, atten=ADC.ATTN_11DB)

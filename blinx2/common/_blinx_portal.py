@@ -510,16 +510,6 @@ def start_configuration_portal():
         if IS_UASYNCIO_V3:
             asyncio.new_event_loop()  # Clear retained state
 
-def start_main_when_it_exists():
-
-    screen.screen_erase()
-    screen.screen_show()
-
-    try:
-        import main
-    except Exception:
-        pass
-
 ###############################################################################
 ###############################################################################
 
@@ -533,7 +523,15 @@ while blinx.button(blinx.LEFT) or blinx.button(blinx.RIGHT):
 
     time.sleep_ms(10)
 
-start_main_when_it_exists()
+else:
+
+    screen.screen_erase()
+    screen.screen_show()
+
+    try:
+        import main
+    except Exception:
+        pass
 
 ###############################################################################
 ###############################################################################

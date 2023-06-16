@@ -1,7 +1,7 @@
 safe_fs = False # bool for the activation of the write and remove ops
 
 def safe_to_modify(filename):
-    return not (filename[:7] == '_blinx_' or filename == 'boot.py')
+    return filename == '_blinx_boot.py' or not (filename[:7] == '_blinx_' or filename == 'boot.py')
 
 #------------------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ from binascii import crc32
 import uasyncio
 
 import network
-import ntptime
+#import ntptime
 import gc
 
 import _blinx_output_sensor as output_sensor_module
@@ -123,7 +123,6 @@ size_data_sensors = [
     general_size+1, # 1  minute
     general_size+1, # 10 minutes
     general_size+1, # 1  hour
-    general_size+1  # 1  day
 ]
 
 offset_data = [
@@ -132,7 +131,6 @@ offset_data = [
     1,
     2,
     3,
-    4
 ]
 
 offset_to_seconds = [
@@ -141,7 +139,6 @@ offset_to_seconds = [
     60,
     600,
     3600,
-    3600*24
 ]
 
 #------------------------------------------------------------------------------
@@ -158,7 +155,7 @@ network.hostname(ident.id)  # assign the mDNS name <device_id>.local
 wlan_connected = uasyncio.ThreadSafeFlag()  # flag indicating wlan connection
 
 def wlan_start_connect():
-    print('wlan_start_connect')
+#    print('wlan_start_connect')
     global wlan
     wlan_connected.clear()
     wlan = None
@@ -175,10 +172,10 @@ async def wlan_connect_loop(wl):
         blinx.led_pin.value(elapsed & 1)
         if wl.isconnected(): break
         elapsed += 1
-        print(elapsed)
-    print('connected to WLAN after',elapsed*0.25,'secs')
+#        print(elapsed)
+#    print('connected to WLAN after',elapsed*0.25,'secs')
     blinx.led_pin.value(0) # led on
-    print(wl.ifconfig())
+#    print(wl.ifconfig())
     wlan = wl
     wlan_connected.set()
 
@@ -375,14 +372,27 @@ async def web_server():
             codeBoot = True
             if q < l:
                 if doc[q:q+7] == b'seqnum=':
-                    print('seqnum')
+#                    print('seqnum')
                     q += 7
                     q = doc.find(b'&', q) + 1
                     if q == 0:
                         q = l
-                
+
+                content = None
+                if doc[q:q+8] == b'content=':
+#                    print('content')
+                    codeBoot = False
+                    q += 8
+                    start = q
+                    q = doc.find(b'&', q)
+                    if q < 0:
+                        q = l
+                    content = ubinascii.a2b_base64(doc[start:q])
+                    if q < l:
+                        q += 1
+                    
                 if doc[q:q+5] == b'time=':
-                    print('time')
+#                    print('time')
                     q += 5
                     start = q
                     q = doc.find(b'&', q) + 1
@@ -390,8 +400,8 @@ async def web_server():
                     if q == 0:
                         q = l
                 
-                if doc[q:q+6] == b'write=' and not safe_fs: # write a file
-                    print('write')
+                if doc[q:q+6] == b'write=': # write a file
+#                    print('write')
                     codeBoot = False
                     q += 6
                     start = q
@@ -402,46 +412,36 @@ async def web_server():
                     if q < l:
                         q += 1
 
-                    content = ''
-                    format = 'w'
-                    if doc[q:q+8] == b'content=': # the content to write
-                        print('content')
-                        q += 8
+                    mode = 'w'
+                    if doc[q:q+5] == b'mode=': # the mode to open the file : `w`, `a`, `w+`, `a+`, `x` ...
+#                        print('mode')
+                        q += 5
                         start = q
                         q = doc.find(b'&', q)
                         if q < 0:
                             q = l
-                        content = ubinascii.a2b_base64(doc[start:q])
+                        mode = str(doc[start:q], 'utf-8')
                         if q < l:
                             q += 1
-                    if doc[q:q+7] == b'format=': # the format to opent the file : `w`, `a`, `w+`, `a+`, `x` ...
-                        print('format')
-                        q += 7
-                        start = q
-                        q = doc.find(b'&', q)
-                        if q < 0:
-                            q = l
-                        format = str(doc[start:q], 'utf-8')
-                        if q < l:
-                            q += 1
-                    try :
-                        if not safe_to_modify(name): # verify if we can remove it
-                            wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                        else:
-                            f = open(name, format)
+                    if content is None:
+                        content = b''
+                    if safe_fs or not safe_to_modify(name): # verify if we can write to it
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                    else:
+                        try:
+                            f = open(name, mode)
                             f.write(content)
                             f.close()
-                            #del f, name, format, content
+                            #del f, name, mode, content
 
                             await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                            await encapsulation.add(b'')
                             await encapsulation.end()
-                    except Exception as e:
-                        print('write : error', e)
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                        except Exception as e:
+                            print('write error:', e)
+                            wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
                 elif doc[q:q+5] == b'read=': # read a file
-                    print('read')
+#                    print('read')
                     codeBoot = False
                     q += 5
                     start = q
@@ -453,7 +453,7 @@ async def web_server():
                         q += 1
                     pos = 0
                     if doc[q:q+4] == b'pos=': # where we are in the reading of the file
-                        print('pos')
+#                        print('pos')
                         q += 4
                         start = q
                         q = doc.find(b'&', q)
@@ -463,31 +463,37 @@ async def web_server():
                         if q < l:
                             q += 1
                     
-                    try :
-                        if not safe_to_modify(name): # verify if we can remove it
-                            wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                        else:
-                            f = open(name, 'rb+')
-                            for _ in range(pos):
-                                f.read(4000)
+                    try:
 
-                            size = os.stat(name)[6] - 4000*pos
-                        
-                            if size < 0: size = 0
-                            if size > 4000 : size = 4000
+                        size = os.stat(name)[6]
+                        f = open(name, 'rb+')
+
+                        # seek file to pos
+                        while pos > 0:
+                            n = min(pos, 64)
+                            pos -= n
+                            size -= n
+                            f.read(n)
+
+                        size = max(0, min(32768, size)) # max encapsulated size
                             
-                            await encapsulation.start(b'text/plain', size)  # total length in bytes
-                            for _ in range(100):
-                                await encapsulation.add(f.read(40))
-                            f.close()
-                            #del f, name, size
-                            await encapsulation.end()
+                        await encapsulation.start(b'text/plain', size)  # total length in bytes
+
+                        while size > 0:
+                            n = min(size, 64)
+                            size -= n
+                            await encapsulation.add(f.read(n))
+
+                        f.close()
+
+                        #del f, name, size
+                        await encapsulation.end()
                     except Exception as e:
-                        print('read : error', e)
+                        print('read error:', e)
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
 
-                elif doc[q:q+7] == b'remove=' and not safe_fs: # remove a file
-                    print('remove')
+                elif doc[q:q+7] == b'remove=': # remove a file
+#                    print('remove')
                     codeBoot = False
                     q += 7
                     start = q
@@ -498,21 +504,20 @@ async def web_server():
                     if q < l:
                         q += 1
                     
-                    try:
-                        if not safe_to_modify(name): # verify if we can remove it
-                            wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                        else:
+                    if safe_fs or not safe_to_modify(name): # verify if we can remove it
+                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                    else:
+                        try:
                             os.remove(name)
                             #del name
 
                             await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                            await encapsulation.add(b'')
                             await encapsulation.end()
-                    except Exception as e:
-                        print('remove : error', e)
-                        wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
+                        except Exception as e:
+                            print('remove error:', e)
+                            wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                 elif doc[q:q+3] == b'ls=': # get the list of the files
-                    print('ls')
+#                    print('ls')
                     codeBoot = False
                     q += 3
                     start = q
@@ -522,10 +527,10 @@ async def web_server():
                     dir = str(doc[start:q], 'utf-8')
                     if q < l:
                         q += 1
-                    size = 0
                     
                     try:
                         t = os.listdir(dir)
+                        size = 0
                         for i in t:
                             size += len(bytes(i, 'utf-8')) + 1
 
@@ -535,12 +540,12 @@ async def web_server():
                         #del dir, t
                         await encapsulation.end()
                     except Exception as e:
-                        print('file list : error', e)
+                        print('ls error:', e)
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                elif doc[q:q+8] == b'version=': # get the version of blinx
-                    print('version')
+                elif doc[q:q+7] == b'version': # get the version of blinx
+#                    print('version')
                     codeBoot = False
-                    q += 8
+                    q += 7
                     q = doc.find(b'&', q) + 1
                     if q == 0:
                         q = l
@@ -550,11 +555,24 @@ async def web_server():
                     await encapsulation.start(b'text/plain', len(v))  # total length in bytes
                     await encapsulation.add(v)
                     await encapsulation.end()
-                elif doc[q:q+13] == b'sensors_stop=': # stop the data collection
-                    blinx.periph_power(0)
-                    print('sensors_stop')
+                elif doc[q:q+7] == b'restart': # restart the device
+#                    print('restart')
                     codeBoot = False
-                    q += 13
+                    q += 7
+                    q = doc.find(b'&', q) + 1
+                    if q == 0:
+                        q = l
+
+                    v = bytes(version.version, 'utf-8')
+                    
+                    await encapsulation.start(b'text/plain', 0)
+                    await encapsulation.end()
+                    blinx.restart()
+                elif doc[q:q+12] == b'stop_sensors': # stop the data collection
+                    blinx.periph_power(0)
+#                    print('stop_sensors')
+                    codeBoot = False
+                    q += 12
                     q = doc.find(b'&', q) + 1
                     if q == 0:
                         q = l
@@ -563,11 +581,10 @@ async def web_server():
                     blinx.periph_power(1)
                     init_data_sensor(False)
                     await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                    await encapsulation.add(b'')
                     await encapsulation.end()
-                elif doc[q:q+7] == b'config=': # config the sensor
+                elif doc[q:q+7] == b'config=': # config the sensors
                     blinx.periph_power(0)
-                    print('config')
+#                    print('config')
                     codeBoot = False
                     q += 7
                     start = q
@@ -582,9 +599,9 @@ async def web_server():
                     blinx.periph_power(1)
                     info_sensors = name_sensors.split(',')
                     nsensors_input_use = len(info_sensors)
-                    if nsensors_input_use == 0 :
+                    if nsensors_input_use == 0:
                         init_data_sensor(True)
-                    else :
+                    else:
                         nsensors_input = 4
                         hi = [0] * len(size_data_sensors)
                         lo = [0] * len(size_data_sensors)
@@ -653,7 +670,7 @@ async def web_server():
                                     input_type_sensors.append(info['type'])
                                     input_more_sensors.append(info['more'])
                                 except Exception as e:
-                                    print('config sensor : error', e)
+                                    print('config error:', e)
                                     init_data_sensor(True)
                                     break
                             else:
@@ -675,11 +692,9 @@ async def web_server():
                                 default_input_index_sensors = list(range(nsensors_input_use))
                                 input_size_sensors_csv.append(sum(input_size_sensors_csv))
                                 await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                                await encapsulation.add(b'')
                                 await encapsulation.end()
-                elif doc[q:q+8] == b'content=': # change a output sensor
-                    # if it is `content` then we have a text in base64, if it is `output` we have a text in utf8
-                    print('content')
+                elif content is not None: # change a output sensor
+#                    print('content')
                     codeBoot = False
                     q += 8
                     start = q
@@ -687,7 +702,7 @@ async def web_server():
                     if q < 0:
                         q = l
                     
-                    output_sensors = str(ubinascii.a2b_base64(doc[start:q]), 'utf-8')
+                    output_sensors = str(content, 'utf-8')
 
                     if q < l:
                         q += 1
@@ -714,11 +729,10 @@ async def web_server():
                                 output_sensor_module.dict_sensors_output[name](line.split('/'))
 
                     await encapsulation.start(b'text/plain', 0)  # total length in bytes
-                    await encapsulation.add(b'')
                     await encapsulation.end()
 
-            if codeBoot : # if it is nothing above, we go to codeboot.org
-                print('codeBoot')
+            if codeBoot: # if it is nothing above, we go to codeboot.org
+#                print('codeBoot')
                 await main_page(encapsulation)
         def registerGetSensor(doc, q): # get the information, when we want to get the data : we want the csv
             l = len(doc)
@@ -754,7 +768,7 @@ async def web_server():
                         q = l
             return n, times_sensors
 
-        print('handle_client_connection')
+#        print('handle_client_connection')
 
         ar = AsyncReader(rstream)
 
@@ -781,7 +795,7 @@ async def web_server():
                     q = len(doc)
 
                 pathUrl = str(doc[:q], 'utf-8')
-                print('doc =', pathUrl)
+#                print('doc =', pathUrl)
 
                 q += 1
                 if q < len(doc) and doc[q] == 0x3f: # two '?' in a row?
@@ -793,10 +807,10 @@ async def web_server():
 
                 #print(pathUrl, len(pathUrl))
                 if pathUrl == '/favicon.ico':
-                    print('favicon')
+#                    print('favicon')
                     wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
-                elif pathUrl != '/' :
-                    print('sensor')
+                elif pathUrl != '/':
+#                    print('sensor')
                     pathUrl = pathUrl[1:]
                     if pathUrl[-4:] == '.csv':
                         pathUrl = pathUrl[:-4]
@@ -805,7 +819,7 @@ async def web_server():
                     else:
                         wstream.write(b'HTTP/1.1 400 Bad Request\r\n')
                 else:
-                    print('other')
+#                    print('other')
                     await register(doc, q, content, encapsulation, wstream)
 
         await wstream.drain()
@@ -836,13 +850,13 @@ async def settime_from_unixtime_servers():
         host = unixtime_server[0]
         port = unixtime_server[1]
         path = unixtime_server[2]
-        print('trying to connect to ' + host)
+#        print('trying to connect to ' + host)
 #        rstream, wstream = await uasyncio.create_task(uasyncio.open_connection('worldtimeapi.org', 80))
         rstream = None
         try:
             rstream, wstream = await uasyncio.create_task(uasyncio.open_connection(host, port))
         except Exception as e:
-            print('e =', repr(e))
+            print('settime_from_unixtime_servers error:', e)
         if rstream is None:
             print('could not connect to ' + host)
             await uasyncio.sleep_ms(1000)
@@ -866,32 +880,37 @@ time_set = False
 
 def settime(unixtime):
     global time_set
-    print('unixtime =', unixtime)
+#    print('unixtime =', unixtime)
     if not time_set:
         time_set = True
         tm = utime.gmtime(unixtime)
         machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
 
-def sync_ntptime():
-    ntp_servers = ('pool.ntp.org', '142.112.54.28', '216.6.2.70', '206.108.0.131', '206.108.0.132')
-    i = 0
-    n = 10
-    while n > 0:
-        ntptime.ntphost = ntp_servers[i]
-        print('trying', ntptime.ntphost)
-        try:
-            ntptime.settime()  # get time from NTP server
-            print('time synced!')
-            return
-        except Exception as e:
-            print('exception', e)
-            i = (i+1) % len(ntp_servers)
-            n -= 1
-    print('failed to sync time using ntp server')
+#def sync_ntptime():
+#    ntp_servers = ('pool.ntp.org', '142.112.54.28', '216.6.2.70', '206.108.0.131', '206.108.0.132')
+#    i = 0
+#    n = 10
+#    while n > 0:
+#        ntptime.ntphost = ntp_servers[i]
+#        print('trying', ntptime.ntphost)
+#        try:
+#            ntptime.settime()  # get time from NTP server
+#            print('time synced!')
+#            return
+#        except Exception as e:
+#            print('exception', e)
+#            i = (i+1) % len(ntp_servers)
+#            n -= 1
+#    print('failed to sync time using ntp server')
 
 async def main_page(encapsulation):
-    # TODO: add query to URL so that codeboot knows my name and address
-    content = '<meta http-equiv="Refresh" content="0; url=&quot;https://blinx.codeboot.org&quot;"/>'
+    name = ident.id
+    i = len(name)
+    while i > 0:
+        if not name[i-1].isdigit():
+            break
+        i -= 1
+    content = b'<meta http-equiv="Refresh" content="0; url=&quot;https://codeboot-org.github.io/blinx/?blx=' + bytes(name[i:], 'utf-8') + b'&quot;"/>'
     await encapsulation.start(b'text/html', len(content))
     await encapsulation.add(content)
     await encapsulation.end()
@@ -1045,12 +1064,12 @@ def modify_port_input(port, name, save_output_sensors_csv, get_save_output_senso
     global input_index_sensors, input_short_name_sensors, input_functions_sensors, input_functions_sensors_csv, \
         input_size_sensors_csv, nsensors_input_use, input_pin_sensors, input_type_sensors, all_csv
     # do we know this sensors
-    if port in input_pin_sensors :
+    if port in input_pin_sensors:
         indexSensors = input_pin_sensors.index(port)
         # is it a input sensors, if yes we modify the type
         if input_type_sensors[indexSensors] == 'in':
-            input_index_sensors[indexSensors] = 'port-' + name
-            input_short_name_sensors[indexSensors] = 'p' + str(port+1)
+            input_index_sensors[indexSensors] = 'output-' + name
+            input_short_name_sensors[indexSensors] = 'o' + str(port+1)
             input_functions_sensors_csv[indexSensors] = save_output_sensors_csv
             input_size_sensors_csv[indexSensors] = 4
             input_size_sensors_csv.pop()
@@ -1081,8 +1100,8 @@ def modify_port_input(port, name, save_output_sensors_csv, get_save_output_senso
                     measurements[i][t+1] = 0 >> 8
     else:
         # we don't know the sensor, then now we know it
-        input_index_sensors.append('port-' + name)
-        input_short_name_sensors.append('p' + str(port+1))
+        input_index_sensors.append('output-' + name)
+        input_short_name_sensors.append('o' + str(port+1))
         input_functions_sensors_csv.append(save_output_sensors_csv)
         input_size_sensors_csv[-1] = 4
         input_size_sensors_csv.append(sum(input_size_sensors_csv))
@@ -1157,8 +1176,8 @@ input_pin_sensors = [
     'i2c',
     'i2c',
     0,
-    1,
     2,
+    1,
     3
 ]
 input_type_sensors = [
@@ -1175,7 +1194,7 @@ def get_sensor_analog_ds1820(n,m):
     global input_index_sensors, input_short_name_sensors, input_functions_sensors, \
         input_functions_sensors_csv, input_size_sensors_csv, nsensors_input_use, \
         input_true_name, input_more_sensors, type_char_sensors
-    index = n*2 + m - 3
+    index = m*2 + n - 3
     name = str(n) + ('a' if m == 1 else 'b')
     nsensors_input_use += 1
     if ds1820.info['ds1820_'+str(n)+str(m)]['use']:
@@ -1225,7 +1244,6 @@ async def sensor_reader():
     global lo, hi, measurement_time, done_one
     while True:
         ms = 1000 - (time.ticks_ms() % 1000)
-#        print('sleep_ms',ms)
         await uasyncio.sleep_ms(ms)
         if nsensors_input_use == 0:
             continue
@@ -1263,7 +1281,6 @@ async def sensor_reader():
         
         for i in range(nsamples): # ?
             for y in range(nsensors_input_use):
-                #print(nsensors_input_use, y, input_functions_sensors)
                 if input_true_name[y] not in list_ds1820:
                     data[y] += input_functions_sensors[y]()
         
@@ -1292,7 +1309,7 @@ async def sensor_reader():
             lo[0] += 1
             if lo[0] == size_data_sensors[0]: lo[0] = 0
 
-        if toDo_interval != None : # we can do an other delta time ?
+        if toDo_interval != None: # we can do an other delta time ?
             moyenneData(toDo_interval)
 
         # can we show data on the screen ?
@@ -1408,9 +1425,7 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
         times_sensors = 3
     elif times_sensors == '1h':
         times_sensors = 4
-    elif times_sensors == '1d':
-        times_sensors = 5
-    else :
+    else:
         times_sensors = 0
     
     input_index_sensors_look = []
@@ -1420,16 +1435,16 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
         input_index_sensors_look = default_input_index_sensors
         csv_header_modify += all_csv 
         size_lign_csv += input_size_sensors_csv[-1] + nsensors_input_use
-    else :
+    else:
         t = name.split(',')
-        for i in t :
+        for i in t:
             csv_header_modify += b',' + bytes(i, 'utf-8')
             if i in input_index_sensors:
                 temp = input_index_sensors.index(i)
                 input_index_sensors_look.append(temp)
                 csv_header_modify += b':' + bytes(type_char_sensors[temp], 'utf-8')
                 size_lign_csv += input_size_sensors_csv[temp] + 1
-            else :
+            else:
                 input_index_sensors_look.append(-1)
                 size_lign_csv += 1
         csv_header_modify += b'\n'
@@ -1446,7 +1461,7 @@ async def measurements_as_csv(encapsulation, name, n, times_sensors):
     #print(avail,hi,lo,n, times_sensors)
     n = min(n, avail)  # number of measurements
 
-    print('measurements_as_csv', n, input_index_sensors_look)
+#    print('measurements_as_csv', n, input_index_sensors_look)
 
     await encapsulation.start(b'text/plain', len(csv_header_modify) + n * size_lign_csv)  # total length in bytes
 

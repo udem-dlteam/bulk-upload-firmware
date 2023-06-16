@@ -20,36 +20,34 @@ def output_screen(args):
 # function for the pin 8 : led/buzzer
 def output_led_buzzer(args):
     duty = '0'
+    duration = 10
     freq = 4000
-    timeout = 10
     if len(args) >= 1:
         duty = args[0]
         if len(args) >= 2:
-            freq = int(args[1])
+            duration = int(args[1])
             if len(args) >= 3:
-                timeout = int(args[2])
+                freq = int(args[2])
 
     pin = blinx.led_pin
-    if timeout < 1:
-        timeout = 10
+    if duration < 1:
+        duration = 10
     duty = duty.lower()
     
     if duty == 'on':
         pin.value(0)
-        can_be_removed[4] = [timeout, lambda : remove_dig(pin, 1)]
-        #uasyncio.create_task(remove_dig(timeout, pin, 1))
+        can_be_removed[4] = [duration, lambda : remove_dig(pin, 1)]
+        #uasyncio.create_task(remove_dig(duration, pin, 1))
     elif duty == 'off':
         pin.value(1)
         can_be_removed[4] = [-1,None]
     else:
-        duty = int(duty)
-        freq = min(max(freq, 5), 40000000)
-        if duty < 0 or duty > 1023:
-            duty = 1023
+        duty = max(0, min(1023, int(duty)))
+        freq = max(5, min(40000000, freq))
 
         pwm = PWM(pin, duty=duty, freq=freq)
-        can_be_removed[4] = [timeout, lambda : remove_pwm(pwm, pin, 1)]
-        #uasyncio.create_task(remove_pwm(timeout, pin, 1023))
+        can_be_removed[4] = [duration, lambda : remove_pwm(pwm, pin, 1)]
+        #uasyncio.create_task(remove_pwm(duration, pin, 1023))
 
 def get_output_port(n, m):
     return lambda args : output_port_general(n, m, args)
@@ -57,47 +55,45 @@ def get_output_port(n, m):
 # function for all the other pin : for the port p1a, p1b, p2a, p2b
 def output_port_general(n,m, args):
     global value_output, can_be_removed
-    port = n*2+m-3
+    port = m*2 + n - 3
     name = str(n) + ('a' if m == 1 else 'b')
     #print(args, n, m)
     
     duty = '0'
-    freq = 4000
-    timeout = 10
+    duration = 10
+    freq = 50
     if len(args) >= 1:
         duty = args[0]
         if len(args) >= 2:
-            freq = int(args[1])
+            duration = int(args[1])
             if len(args) >= 3:
-                timeout = int(args[2])
+                freq = int(args[2])
 
     t = blinx.port_pin_num(n,m)
     pin = Pin(t, Pin.OUT)
-    if timeout < 1:
-        timeout = 10
+    if duration < 1:
+        duration = 10
     duty = duty.lower()
     timeInterval = int(time.ticks_ms() / 1000)
     
     if duty == 'on':
         pin.value(1)
-        #uasyncio.create_task(remove_dig(timeout, pin))
-        can_be_removed[port] = [timeout, lambda : remove_dig(pin)]
-        value_output[port] = [1025, timeInterval+timeout]
+        #uasyncio.create_task(remove_dig(duration, pin))
+        can_be_removed[port] = [duration, lambda : remove_dig(pin)]
+        value_output[port] = [1025, timeInterval+duration]
     elif duty == 'off':
         pin.value(0)
         can_be_removed[port] = [-1,None]
         value_output[port] = [0, timeInterval]
     else:
-        duty = int(duty)
-        freq = min(max(freq, 1), 40000000)
-        if duty < 0 or duty > 1023:
-            duty = 0
+        duty = max(0, min(1023, int(duty)))
+        freq = max(5, min(40000000, freq))
 
         pwm = PWM(pin, duty=duty, freq=freq)
-        #uasyncio.create_task(remove_pwm(timeout, pin))
-        can_be_removed[port] = [timeout, lambda : remove_pwm(pwm, pin)]
+        #uasyncio.create_task(remove_pwm(duration, pin))
+        can_be_removed[port] = [duration, lambda : remove_pwm(pwm, pin)]
         #print(pwm)
-        value_output[port] = [duty+1, timeInterval+timeout]
+        value_output[port] = [duty+1, timeInterval+duration]
     
     modify_port_input(port, name, save_output_sensors_csv, get_save_output_sensors)
 
@@ -155,10 +151,10 @@ dict_sensors_output = {
     'screen' : output_screen,
     'led' : output_led_buzzer,
     'buzzer' : output_led_buzzer,
-    'port1' : get_output_port(1,1),
-    'port2' : get_output_port(2,1),
-    'port3' : get_output_port(1,2),
-    'port4' : get_output_port(2,2)
+    'output1' : get_output_port(1,1),
+    'output2' : get_output_port(2,1),
+    'output3' : get_output_port(1,2),
+    'output4' : get_output_port(2,2)
 }
 
 can_be_removed = [[-1,None],[-1,None],[-1,None],[-1,None],[-1,None]]
