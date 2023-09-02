@@ -109,6 +109,7 @@ import gc
 
 import _blinx_output_sensor as output_sensor_module
 import _blinx_shtc3 as shtc3
+import _blinx_vl53l0x as vl53l0x
 import _blinx_analog as analog
 import _blinx_ds1820 as ds1820
 
@@ -1057,7 +1058,7 @@ class PNGEncapsulation:
 
 # sensor reader
 
-import_file_sensors = ['shtc3.mpy', 'analog.mpy', 'ds1820.mpy']
+import_file_sensors = ['_blinx_shtc3.mpy', '_blinx_analog.mpy', '_blinx_ds1820.mpy', '_blinx_vl53l0x.mpy']
 
 # when we ask to modify a ouput sensor, we modify the type for the port
 def modify_port_input(port, name, save_output_sensors_csv, get_save_output_sensors):
@@ -1219,6 +1220,20 @@ def get_sensor_analog_ds1820(n,m):
 for i in range(1,3):
     for y in range(1,3):
         get_sensor_analog_ds1820(i,y)
+
+if 41 in blinx.i2c.scan() :
+    input_index_sensors.append("vl53l0x")
+    input_short_name_sensors.append("vl")
+    input_functions_sensors.append(vl53l0x.info['vl53l0x']['function'])
+    input_functions_sensors_csv.append(vl53l0x.info['vl53l0x']['function_csv'])
+    input_size_sensors_csv.append(vl53l0x.info['vl53l0x']['size_csv'])
+    input_more_sensors.append(vl53l0x.info['vl53l0x']['more'])
+    type_char_sensors.append(vl53l0x.info['vl53l0x']['char'])
+    input_true_name.append("vl53l0x-distance")
+    nsensors_input += 1
+    nsensors_input_use += 1
+    input_pin_sensors.append('i2c')
+    input_type_sensors.append(vl53l0x.info['vl53l0x']['type'])
 
 measurement_time = get_time()
 lo = [0] * len(size_data_sensors)
